@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # Builtin
+from getpass import getpass
 import json
 from typing import TypedDict, TYPE_CHECKING
 
@@ -49,7 +50,7 @@ def run_credential_process(
     duration_seconds: int,
 ) -> None:
     client: STSClient = boto3.session.Session(profile_name=profile).client("sts")
-    token_code: str = click.prompt("Please enter MFA code: ", hide_input=True)
+    token_code = getpass("MFA code: ")
     resp = client.assume_role(
         RoleArn=role_arn,
         RoleSessionName=role_session_name,
