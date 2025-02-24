@@ -1,0 +1,78 @@
+[project]
+name = "kxue43-toolkit"
+version = "1.0.0"
+authors = [
+    { name = "Ke Xue", email = "xueke.kent@gmail.com" },
+]
+description = "Toolkit of various CLI programs for my workflow."
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "boto3>=1.36.0"
+]
+
+[project.scripts]
+# mdmak = "mdmak:main"
+
+[build-system]
+requires = [
+    "setuptools>=65",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mdmak = ["py.typed"]
+
+[tool.poetry]
+packages = [{ include = "**/*", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.group.build]
+optional = false
+
+[tool.poetry.group.build.dependencies]
+build = "*"
+
+[tool.poetry.group.develop]
+optional = true
+
+[tool.poetry.group.develop.dependencies]
+ipykernel = "^6.27.1"
+boto3-stubs = {extras = ["sts"], version = "^1.36.26"}
+
+[tool.poetry.group.linting]
+optional = true
+
+[tool.poetry.group.linting.dependencies]
+flake8 = "7.1.1" # This version must be the same as in `./.pre-commit-config.yaml`.
+black = "24.10.0" # This version must be the same as in `./.pre-commit-config.yaml`.
+mypy = "^1.12.0"
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.2.2"
+pytest-mock = "^3.10.0"
+pytest-cov = "^6.0.0"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=src --cov-report=term-missing"
