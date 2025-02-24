@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-# mdmak = "mdmak:main"
+toolkit = "kxue43_toolkit.cli:cli"
 
 [build-system]
 requires = [
@@ -51,7 +51,7 @@ optional = true
 
 [tool.poetry.group.develop.dependencies]
 ipykernel = "^6.27.1"
-boto3-stubs = {extras = ["sts"], version = "^1.36.26"}
+boto3-stubs = "*"
 
 [tool.poetry.group.linting]
 optional = true
