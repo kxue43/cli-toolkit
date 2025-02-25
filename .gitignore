@@ -10,3 +10,4 @@ src/*.egg-info/**/*
 /data
 /adhoc*.py
 .DS_Store
+/adhoc*.py

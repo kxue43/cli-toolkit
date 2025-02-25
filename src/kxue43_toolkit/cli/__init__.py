@@ -1,13 +1,15 @@
-from __future__ import annotations
-
 # Builtin
+from __future__ import annotations
 from getpass import getpass
 import json
-from typing import TypedDict, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 # External
 import boto3
 import click
+
+# Own
+from ..aws import CredentialProcessOutput, save_cache, get_active_from_cache
 
 # Type Checking
 if TYPE_CHECKING:
@@ -17,14 +19,6 @@ if TYPE_CHECKING:
 @click.group()
 def cli():
     pass
-
-
-class CredentialProcessOutput(TypedDict):
-    Version: int
-    AccessKeyId: str
-    SecretAccessKey: str
-    SessionToken: str
-    Expiration: str
 
 
 @cli.command()
@@ -49,6 +43,10 @@ def run_credential_process(
     role_session_name: str,
     duration_seconds: int,
 ) -> None:
+    output = get_active_from_cache(role_arn)
+    if output is not None:
+        click.echo(output)
+        return
     client: STSClient = boto3.session.Session(profile_name=profile).client("sts")
     token_code = getpass("MFA code: ")
     resp = client.assume_role(
@@ -59,11 +57,12 @@ def run_credential_process(
         TokenCode=token_code,
     )
     creds = resp["Credentials"]
-    output: CredentialProcessOutput = {
+    data: CredentialProcessOutput = {
         "Version": 1,
         "AccessKeyId": creds["AccessKeyId"],
         "SecretAccessKey": creds["SecretAccessKey"],
         "SessionToken": creds["SessionToken"],
         "Expiration": creds["Expiration"].isoformat(),
     }
-    click.echo(json.dumps(output, indent=2))
+    save_cache(role_arn, data)
+    click.echo(json.dumps(data, indent=2))
