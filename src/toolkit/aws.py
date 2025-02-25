@@ -8,7 +8,7 @@ import re
 from typing import List, Tuple, TypedDict
 
 
-CACHE_DIR = Path.home().joinpath(".aws", "kxue43-toolkit")
+CACHE_DIR = Path.home().joinpath(".aws", "toolkit-cache")
 
 
 # Type Checking

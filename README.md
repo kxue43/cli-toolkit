@@ -33,5 +33,5 @@ Users of this package can conveniently install it from the wheel file available 
 This package is not on PyPI.
 
 ```bash
-pip install "cli-toolkit@https://github.com/kxue43/cli-toolkit/releases/download/1.1.0/cli_toolkit-1.1.0-py3-none-any.whl"
+pip install "cli-toolkit@https://github.com/kxue43/cli-toolkit/releases/download/1.1.1/cli_toolkit-1.1.1-py3-none-any.whl"
 ```
