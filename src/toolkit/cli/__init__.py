@@ -5,7 +5,6 @@ import json
 from typing import TYPE_CHECKING
 
 # External
-import boto3
 import click
 
 # Own
@@ -47,6 +46,9 @@ def run_credential_process(
     if output is not None:
         click.echo(output)
         return
+
+    import boto3
+
     client: STSClient = boto3.session.Session(profile_name=profile).client("sts")
     token_code = getpass("MFA code: ")
     resp = client.assume_role(
@@ -65,4 +67,4 @@ def run_credential_process(
         "Expiration": creds["Expiration"].isoformat(),
     }
     save_cache(role_arn, data)
-    click.echo(json.dumps(data, indent=2))
+    click.echo(json.dumps(data))

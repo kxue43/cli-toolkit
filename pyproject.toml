@@ -1,10 +1,10 @@
 [project]
-name = "kxue43-toolkit"
-version = "1.0.3"
+name = "cli-toolkit"
+version = "1.1.0"
 authors = [
     { name = "Ke Xue", email = "xueke.kent@gmail.com" },
 ]
-description = "Toolkit of various CLI programs for my workflow."
+description = "Toolkit of various CLI programs to aid my DEV workflows."
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-toolkit = "kxue43_toolkit.cli:cli"
+toolkit = "toolkit.cli:cli"
 
 [build-system]
 requires = [
@@ -33,7 +33,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-mdmak = ["py.typed"]
+toolkit = ["py.typed"]
 
 [tool.poetry]
 packages = [{ include = "**/*", from = "src" }]
