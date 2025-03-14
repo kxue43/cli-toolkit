@@ -1,13 +1,4 @@
-**/__pycache__/**/*
-.venv/**/*
-.tox/**/*
 dist/**/*
-src/*.egg-info/**/*
-.python-version
 /adhoc/
-/.coverage
-/poetry.toml
 /data
-/adhoc*.py
 .DS_Store
-/adhoc*.py
