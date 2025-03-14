@@ -33,7 +33,6 @@ func (c *CLI) Run() error {
 			parser.WithAutoHeadingID(),
 		),
 		goldmark.WithRendererOptions(
-			html.WithHardWraps(),
 			html.WithXHTML(),
 		),
 	)
