@@ -2,3 +2,5 @@ dist/**/*
 /adhoc/
 /data
 .DS_Store
+/toolkit
+/mdmak
