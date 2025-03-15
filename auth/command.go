@@ -3,6 +3,8 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -31,11 +33,19 @@ func (a *AssumeRoleCmd) Run() error {
 	defer tty.Close()
 	logger := log.New(tty, "toolkit: ", 0)
 
-	cache := NewCacheRetrieverSaver(logger)
-	creds, got := cache.Retrieve(a.RoleArn)
-	if got {
-		_, err := os.Stdout.Write(creds)
-		return err
+	var cacheModeOn = true
+	cache, err := NewCacheRetrieverSaver(logger)
+	if err != nil {
+		cacheModeOn = false
+		logger.Printf("cache mode off: %s\n", err)
+	}
+
+	if cacheModeOn {
+		creds, err := cache.Retrieve(a.RoleArn)
+		if err == nil && creds != nil {
+			_, err = os.Stdout.Write(creds)
+			return err
+		}
 	}
 
 	config, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
@@ -57,9 +67,12 @@ func (a *AssumeRoleCmd) Run() error {
 			return string(bytes.TrimSpace(buf[:n])), nil
 		}
 	})
+
 	screds, err := provider.Retrieve(context.TODO())
 	if err != nil {
-		return fmt.Errorf("failed to retrieve STS credentials: %w", err)
+		err := fmt.Errorf("failed to retrieve STS credentials: %w", err)
+		logger.Println(err)
+		return err
 	}
 	output := CredentialProcessOutput{
 		Version:         1,
@@ -68,7 +81,24 @@ func (a *AssumeRoleCmd) Run() error {
 		SessionToken:    screds.SessionToken,
 		Expiration:      screds.Expires.Format(expirationLayout),
 	}
-	contents := cache.Save(a.RoleArn, &output)
+
+	if cacheModeOn {
+		contents, err := cache.Save(a.RoleArn, &output)
+		if errors.Is(err, CredentialErr) {
+			cache.Logger.Println(err)
+			return err
+		}
+		cache.Logger.Println(err)
+		_, err = os.Stdout.Write(contents)
+		return err
+	}
+
+	contents, err := json.Marshal(&output)
+	if err != nil {
+		err := fmt.Errorf("failed to marshal credential process output: %w", err)
+		logger.Println(err)
+		return err
+	}
 	_, err = os.Stdout.Write(contents)
 	return err
 }
