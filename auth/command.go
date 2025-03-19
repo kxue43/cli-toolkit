@@ -88,7 +88,6 @@ func (a *AssumeRoleCmd) Run() error {
 			cache.Logger.Println(err)
 			return err
 		}
-		cache.Logger.Println(err)
 		_, err = os.Stdout.Write(contents)
 		return err
 	}
