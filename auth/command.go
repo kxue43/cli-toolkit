@@ -25,25 +25,34 @@ type AssumeRoleCmd struct {
 	DurationSeconds int    `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
 }
 
-func (a *AssumeRoleCmd) Run() error {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0666)
+func (a *AssumeRoleCmd) Run() (err error) {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open /dev/tty file: %w", err)
 	}
-	defer tty.Close()
+
+	defer func() {
+		err = tty.Close()
+	}()
+
 	logger := log.New(tty, "toolkit: ", 0)
 
 	var cacheModeOn = true
+
 	cache, err := NewCacheRetrieverSaver(logger)
 	if err != nil {
 		cacheModeOn = false
+
 		logger.Printf("cache mode off: %s\n", err)
 	}
 
+	var creds []byte
+
 	if cacheModeOn {
-		creds, err := cache.Retrieve(a.RoleArn)
+		creds, err = cache.Retrieve(a.RoleArn)
 		if err == nil && creds != nil {
 			_, err = os.Stdout.Write(creds)
+
 			return err
 		}
 	}
@@ -55,25 +64,33 @@ func (a *AssumeRoleCmd) Run() error {
 		o.Duration = time.Second * time.Duration(a.DurationSeconds)
 		o.SerialNumber = aws.String(a.MFASerial)
 		o.TokenProvider = func() (string, error) {
-			_, err := tty.WriteString("MFA code: ")
+			_, err = tty.WriteString("MFA code: ")
 			if err != nil {
 				return "", fmt.Errorf("failed to write to /dev/tty to prompt for MFA code: %w", err)
 			}
+
 			buf := make([]byte, 256)
-			n, err := tty.Read(buf)
+
+			var n int
+
+			n, err = tty.Read(buf)
+
 			if err != nil {
 				return "", fmt.Errorf("failed to read MFA code from /dev/tty: %w", err)
 			}
+
 			return string(bytes.TrimSpace(buf[:n])), nil
 		}
 	})
 
 	screds, err := provider.Retrieve(context.TODO())
 	if err != nil {
-		err := fmt.Errorf("failed to retrieve STS credentials: %w", err)
+		err = fmt.Errorf("failed to retrieve STS credentials: %w", err)
 		logger.Println(err)
+
 		return err
 	}
+
 	output := CredentialProcessOutput{
 		Version:         1,
 		AccessKeyId:     screds.AccessKeyID,
@@ -82,22 +99,30 @@ func (a *AssumeRoleCmd) Run() error {
 		Expiration:      screds.Expires.Format(expirationLayout),
 	}
 
+	var contents []byte
+
 	if cacheModeOn {
-		contents, err := cache.Save(a.RoleArn, &output)
-		if errors.Is(err, CredentialErr) {
+		contents, err = cache.Save(a.RoleArn, &output)
+		if errors.Is(err, ErrInvalidCredential) {
 			cache.Logger.Println(err)
+
 			return err
 		}
+
 		_, err = os.Stdout.Write(contents)
+
 		return err
 	}
 
-	contents, err := json.Marshal(&output)
+	contents, err = json.Marshal(&output)
 	if err != nil {
-		err := fmt.Errorf("failed to marshal credential process output: %w", err)
+		err = fmt.Errorf("failed to marshal credential process output: %w", err)
 		logger.Println(err)
+
 		return err
 	}
+
 	_, err = os.Stdout.Write(contents)
+
 	return err
 }

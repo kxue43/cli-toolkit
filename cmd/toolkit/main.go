@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/alecthomas/kong"
+
 	"github.com/kxue43/cli-toolkit/auth"
 )
 
