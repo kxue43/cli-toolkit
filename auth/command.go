@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -16,113 +17,110 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-type AssumeRoleCmd struct {
-	RoleArn         string `arg:"" required:"" name:"RoleArn" help:"ARN of the IAM role to assume."`
-	MFASerial       string `required:"" name:"mfa-serial" help:"ARN of the virtual MFA to use when assuming the role."`
-	Profile         string `required:"" name:"profile" help:"Source profile used for assuming the role."`
-	Region          string `name:"region" default:"us-east-1" help:"The regional STS service endpoint to call."`
-	RoleSessionName string `name:"role-session-name" default:"ToolkitCLI" help:"Role session name."`
-	DurationSeconds int    `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
-}
-
-func (a *AssumeRoleCmd) Run() (err error) {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open /dev/tty file: %w", err)
+type (
+	AssumeRoleCmd struct {
+		RoleArn         string `arg:"" required:"" name:"RoleArn" help:"ARN of the IAM role to assume."`
+		MFASerial       string `required:"" name:"mfa-serial" help:"ARN of the virtual MFA to use when assuming the role."`
+		Profile         string `required:"" name:"profile" help:"Source profile used for assuming the role."`
+		Region          string `name:"region" default:"us-east-1" help:"The regional STS service endpoint to call."`
+		RoleSessionName string `name:"role-session-name" default:"ToolkitCLI" help:"Role session name."`
+		DurationSeconds int    `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
 	}
 
-	defer func() {
-		err = tty.Close()
-	}()
+	ClientInteractor struct {
+		io.ReadWriter
+	}
+)
 
-	logger := log.New(tty, "toolkit: ", 0)
+func (c *ClientInteractor) PromptMFAToken() (code string, err error) {
+	_, err = io.WriteString(c, "MFA code: ")
+	if err != nil {
+		return "", fmt.Errorf("failed to prompt for MFA code: %w", err)
+	}
+
+	buf := make([]byte, 256)
+	n, err := c.Read(buf)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to read MFA code from user input: %w", err)
+	}
+
+	return string(bytes.TrimSpace(buf[:n])), nil
+}
+
+func (c *ClientInteractor) NewLogger(prefix string, flag int) *log.Logger {
+	return log.New(c.ReadWriter, prefix, flag)
+}
+
+func (a *AssumeRoleCmd) Run(fd io.ReadWriter, dest io.Writer) (err error) {
+	ci := ClientInteractor{fd}
+	logger := ci.NewLogger("toolkit: ", 0)
 
 	var cacheModeOn = true
 
-	cache, err := NewCacheRetrieverSaver(logger)
+	cache, err := NewCacheSaveRetriever(logger)
 	if err != nil {
 		cacheModeOn = false
 
 		logger.Printf("cache mode off: %s\n", err)
 	}
 
-	var creds []byte
+	// Output of the AWS CLI credential process.
+	var output []byte
 
 	if cacheModeOn {
-		creds, err = cache.Retrieve(a.RoleArn)
-		if err == nil && creds != nil {
-			_, err = os.Stdout.Write(creds)
+		output, err = cache.Retrieve(a.RoleArn)
+		if err == nil && output != nil {
+			_, err = dest.Write(output)
 
 			return err
 		}
 	}
 
-	config, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
-	client := sts.NewFromConfig(config)
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
+	if err != nil {
+		return fmt.Errorf("failed to load AWS CLI/SDK configuration: %w", err)
+	}
+
+	client := sts.NewFromConfig(cfg)
 	provider := stscreds.NewAssumeRoleProvider(client, a.RoleArn, func(o *stscreds.AssumeRoleOptions) {
 		o.RoleSessionName = a.RoleSessionName
 		o.Duration = time.Second * time.Duration(a.DurationSeconds)
 		o.SerialNumber = aws.String(a.MFASerial)
-		o.TokenProvider = func() (string, error) {
-			_, err = tty.WriteString("MFA code: ")
-			if err != nil {
-				return "", fmt.Errorf("failed to write to /dev/tty to prompt for MFA code: %w", err)
-			}
-
-			buf := make([]byte, 256)
-
-			var n int
-
-			n, err = tty.Read(buf)
-
-			if err != nil {
-				return "", fmt.Errorf("failed to read MFA code from /dev/tty: %w", err)
-			}
-
-			return string(bytes.TrimSpace(buf[:n])), nil
-		}
+		o.TokenProvider = ci.PromptMFAToken
 	})
 
-	screds, err := provider.Retrieve(context.TODO())
+	stsCreds, err := provider.Retrieve(context.TODO())
 	if err != nil {
-		err = fmt.Errorf("failed to retrieve STS credentials: %w", err)
-		logger.Println(err)
-
-		return err
+		return fmt.Errorf("failed to retrieve STS credentials: %w", err)
 	}
 
-	output := CredentialProcessOutput{
+	// structured output
+	soutput := CredentialProcessOutput{
+		AccessKeyId:     stsCreds.AccessKeyID,
+		SecretAccessKey: stsCreds.SecretAccessKey,
+		SessionToken:    stsCreds.SessionToken,
+		Expiration:      stsCreds.Expires.Format(expirationLayout),
 		Version:         1,
-		AccessKeyId:     screds.AccessKeyID,
-		SecretAccessKey: screds.SecretAccessKey,
-		SessionToken:    screds.SessionToken,
-		Expiration:      screds.Expires.Format(expirationLayout),
 	}
-
-	var contents []byte
 
 	if cacheModeOn {
-		contents, err = cache.Save(a.RoleArn, &output)
+		output, err = cache.Save(a.RoleArn, &soutput)
 		if errors.Is(err, ErrInvalidCredential) {
-			cache.Logger.Println(err)
-
 			return err
 		}
 
-		_, err = os.Stdout.Write(contents)
+		_, err = os.Stdout.Write(output)
 
 		return err
 	}
 
-	contents, err = json.Marshal(&output)
+	output, err = json.Marshal(&soutput)
 	if err != nil {
-		err = fmt.Errorf("failed to marshal credential process output: %w", err)
-		logger.Println(err)
-
-		return err
+		return fmt.Errorf("failed to marshal credential process output: %w", err)
 	}
 
-	_, err = os.Stdout.Write(contents)
+	_, err = os.Stdout.Write(output)
 
 	return err
 }

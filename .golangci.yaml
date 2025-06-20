@@ -38,6 +38,13 @@ linters:
   settings:
     asasalint:
       use-builtin-exclusions: true
+    decorder:
+      disable-dec-order-check: false
+      disable-init-func-first-check: false
+      disable-dec-num-check: false
+      disable-type-dec-num-check: false
+      disable-const-dec-num-check: false
+      disable-var-dec-num-check: false
     depguard:
       rules:
         avoid-list:
@@ -88,6 +95,7 @@ linters:
       - path: '^auth/cache\.go$'
         linters:
           - gosec
+        # crypto/sha1 is used for hashing, not encryption. 
         text: "weak cryptographic primitive"
     paths:
       - adhoc/

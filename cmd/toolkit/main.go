@@ -1,6 +1,9 @@
 package main
 
 import (
+	"io"
+	"os"
+
 	"github.com/alecthomas/kong"
 
 	"github.com/kxue43/cli-toolkit/auth"
@@ -18,6 +21,20 @@ func main() {
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{Compact: true}),
 	)
-	err := ctx.Run()
+
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
+	if err != nil {
+		ctx.Fatalf("failed to open /dev/tty file: %v", err)
+	}
+
+	defer func() {
+		ctx.FatalIfErrorf(tty.Close())
+	}()
+
+	ctx.BindTo(tty, (*io.ReadWriter)(nil))
+	ctx.BindTo(os.Stdout, (*io.Writer)(nil))
+
+	err = ctx.Run()
+
 	ctx.FatalIfErrorf(err)
 }
