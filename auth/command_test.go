@@ -65,6 +65,7 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	dest := MockFileDescriptor{}
 
 	hdm := HomeDirMocker{}
+
 	hdm.SetUp(t)
 	defer hdm.TearDown(t)
 

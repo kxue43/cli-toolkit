@@ -42,8 +42,8 @@ func (c *ClientInteractor) PromptMFAToken() (code string, err error) {
 	}
 
 	buf := make([]byte, 256)
-	n, err := c.Read(buf)
 
+	n, err := c.Read(buf)
 	if err != nil {
 		return "", fmt.Errorf("failed to read MFA code from user input: %w", err)
 	}

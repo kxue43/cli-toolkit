@@ -34,7 +34,7 @@ linters:
     - staticcheck
     - thelper
     - unused
-    - wsl
+    - wsl_v5
   settings:
     asasalint:
       use-builtin-exclusions: true
@@ -89,6 +89,10 @@ linters:
       no-global: all
       context: all
       static-msg: true
+    wsl_v5:
+      allow-first-in-block: false
+      allow-whole-block: true
+      branch-max-lines: 4
   exclusions:
     generated: lax
     rules:

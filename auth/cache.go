@@ -90,7 +90,6 @@ func NewCacheSaveRetriever(logger *log.Logger) (*cacheSaveRetriever, error) {
 	cacheDir := filepath.Join(home, ".aws", "toolkit-cache")
 
 	info, err := os.Stat(cacheDir)
-
 	if os.IsNotExist(err) {
 		if err = os.MkdirAll(cacheDir, 0750); err != nil {
 			return nil, errors.New("failed to create cache directory")
