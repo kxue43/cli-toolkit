@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
-	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,88 +16,117 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-type AssumeRoleCmd struct {
-	RoleArn         string `arg:"" required:"" name:"RoleArn" help:"ARN of the IAM role to assume."`
-	MFASerial       string `required:"" name:"mfa-serial" help:"ARN of the virtual MFA to use when assuming the role."`
-	Profile         string `required:"" name:"profile" help:"Source profile used for assuming the role."`
-	Region          string `name:"region" default:"us-east-1" help:"The regional STS service endpoint to call."`
-	RoleSessionName string `name:"role-session-name" default:"ToolkitCLI" help:"Role session name."`
-	DurationSeconds int    `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
+type (
+	AssumeRoleCmd struct {
+		ci              ClientInteractor
+		cache           *cacheSaveRetriever
+		stsClient       *sts.Client
+		RoleArn         string `arg:"" required:"" name:"RoleArn" help:"ARN of the IAM role to assume."`
+		MFASerial       string `required:"" name:"mfa-serial" help:"ARN of the virtual MFA to use when assuming the role."`
+		Profile         string `required:"" name:"profile" help:"Source profile used for assuming the role."`
+		Region          string `name:"region" default:"us-east-1" help:"The regional STS service endpoint to call."`
+		RoleSessionName string `name:"role-session-name" default:"ToolkitCLI" help:"Role session name."`
+		DurationSeconds int32  `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
+		cacheModeOff    bool
+	}
+
+	ClientInteractor struct {
+		io.ReadWriter
+	}
+)
+
+func (c *ClientInteractor) PromptMFAToken() (code string, err error) {
+	_, err = io.WriteString(c, "MFA code: ")
+	if err != nil {
+		return "", fmt.Errorf("failed to prompt for MFA code: %w", err)
+	}
+
+	buf := make([]byte, 256)
+
+	n, err := c.Read(buf)
+	if err != nil {
+		return "", fmt.Errorf("failed to read MFA code from user input: %w", err)
+	}
+
+	return string(bytes.TrimSpace(buf[:n])), nil
 }
 
-func (a *AssumeRoleCmd) Run() error {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0666)
-	if err != nil {
-		return fmt.Errorf("failed to open /dev/tty file: %w", err)
-	}
-	defer tty.Close()
-	logger := log.New(tty, "toolkit: ", 0)
+func (c *ClientInteractor) NewLogger(prefix string, flag int) *log.Logger {
+	return log.New(c.ReadWriter, prefix, flag)
+}
 
-	var cacheModeOn = true
-	cache, err := NewCacheRetrieverSaver(logger)
+func (a *AssumeRoleCmd) AfterApply(fd io.ReadWriter) error {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
 	if err != nil {
-		cacheModeOn = false
+		return fmt.Errorf("failed to load AWS CLI/SDK configuration: %w", err)
+	}
+
+	a.stsClient = sts.NewFromConfig(cfg)
+
+	a.ci = ClientInteractor{fd}
+	logger := a.ci.NewLogger("toolkit: ", 0)
+
+	a.cache, err = NewCacheSaveRetriever(logger)
+	if err != nil {
+		a.cacheModeOff = true
+
 		logger.Printf("cache mode off: %s\n", err)
 	}
 
-	if cacheModeOn {
-		creds, err := cache.Retrieve(a.RoleArn)
-		if err == nil && creds != nil {
-			_, err = os.Stdout.Write(creds)
+	return nil
+}
+
+func (a *AssumeRoleCmd) Run(dest io.Writer) (err error) {
+	// Output of the AWS CLI credential process.
+	var output []byte
+
+	if !a.cacheModeOff {
+		output, err = a.cache.Retrieve(a.RoleArn)
+		if err == nil && output != nil {
+			_, err = dest.Write(output)
+
 			return err
 		}
 	}
 
-	config, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
-	client := sts.NewFromConfig(config)
-	provider := stscreds.NewAssumeRoleProvider(client, a.RoleArn, func(o *stscreds.AssumeRoleOptions) {
+	provider := stscreds.NewAssumeRoleProvider(a.stsClient, a.RoleArn, func(o *stscreds.AssumeRoleOptions) {
 		o.RoleSessionName = a.RoleSessionName
 		o.Duration = time.Second * time.Duration(a.DurationSeconds)
 		o.SerialNumber = aws.String(a.MFASerial)
-		o.TokenProvider = func() (string, error) {
-			_, err := tty.WriteString("MFA code: ")
-			if err != nil {
-				return "", fmt.Errorf("failed to write to /dev/tty to prompt for MFA code: %w", err)
-			}
-			buf := make([]byte, 256)
-			n, err := tty.Read(buf)
-			if err != nil {
-				return "", fmt.Errorf("failed to read MFA code from /dev/tty: %w", err)
-			}
-			return string(bytes.TrimSpace(buf[:n])), nil
-		}
+		o.TokenProvider = a.ci.PromptMFAToken
 	})
 
-	screds, err := provider.Retrieve(context.TODO())
+	stsCreds, err := provider.Retrieve(context.TODO())
 	if err != nil {
-		err := fmt.Errorf("failed to retrieve STS credentials: %w", err)
-		logger.Println(err)
-		return err
-	}
-	output := CredentialProcessOutput{
-		Version:         1,
-		AccessKeyId:     screds.AccessKeyID,
-		SecretAccessKey: screds.SecretAccessKey,
-		SessionToken:    screds.SessionToken,
-		Expiration:      screds.Expires.Format(expirationLayout),
+		return fmt.Errorf("failed to retrieve STS credentials: %w", err)
 	}
 
-	if cacheModeOn {
-		contents, err := cache.Save(a.RoleArn, &output)
-		if errors.Is(err, CredentialErr) {
-			cache.Logger.Println(err)
+	// structured output
+	soutput := CredentialProcessOutput{
+		AccessKeyId:     stsCreds.AccessKeyID,
+		SecretAccessKey: stsCreds.SecretAccessKey,
+		SessionToken:    stsCreds.SessionToken,
+		Expiration:      stsCreds.Expires.Format(expirationLayout),
+		Version:         1,
+	}
+
+	if !a.cacheModeOff {
+		output, err = a.cache.Save(a.RoleArn, &soutput)
+		if errors.Is(err, ErrInvalidCredential) {
 			return err
 		}
-		_, err = os.Stdout.Write(contents)
+
+		_, err = dest.Write(output)
+
 		return err
 	}
 
-	contents, err := json.Marshal(&output)
+	output, err = json.Marshal(&soutput)
 	if err != nil {
-		err := fmt.Errorf("failed to marshal credential process output: %w", err)
-		logger.Println(err)
-		return err
+		return fmt.Errorf("failed to marshal credential process output: %w", err)
 	}
-	_, err = os.Stdout.Write(contents)
+
+	_, err = dest.Write(output)
+
 	return err
 }
