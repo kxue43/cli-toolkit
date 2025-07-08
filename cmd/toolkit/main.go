@@ -8,11 +8,13 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/kxue43/cli-toolkit/auth"
+	"github.com/kxue43/cli-toolkit/scaffold"
 )
 
 func main() {
 	var cli struct {
-		AssumeRole auth.AssumeRoleCmd `cmd:"" name:"assume-role" help:"Run AWS CLI credential process by assuming a role."`
+		StartGoProject scaffold.GoProjectCmd `cmd:"" name:"start-go-project" help:"Start a Go project in the current directory."`
+		AssumeRole     auth.AssumeRoleCmd    `cmd:"" name:"assume-role" help:"Run AWS CLI credential process by assuming a role."`
 	}
 
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
