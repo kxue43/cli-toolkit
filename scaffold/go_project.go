@@ -25,22 +25,11 @@ var (
 	golangciYaml []byte
 
 	//go:embed "data/test-and-lint.yaml"
-	testAndLintYaml string
+	goTestAndLintYaml string
 )
 
-func (c *GoProjectCmd) AfterApply() error {
-	var err error
-
-	c.rootDir, err = os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	return nil
-}
-
-func (c *GoProjectCmd) writeFile(name string, hook func(io.Writer) error) (err error) {
-	fd, err := os.Create(filepath.Clean(filepath.Join(c.rootDir, name)))
+func WriteToFile(dir, name string, hook func(io.Writer) error) (err error) {
+	fd, err := os.Create(filepath.Clean(filepath.Join(dir, name)))
 	if err != nil {
 		return fmt.Errorf("failed to create %q file: %w", name, err)
 	}
@@ -58,8 +47,19 @@ func (c *GoProjectCmd) writeFile(name string, hook func(io.Writer) error) (err e
 	return nil
 }
 
+func (c *GoProjectCmd) AfterApply() error {
+	var err error
+
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	return nil
+}
+
 func (c *GoProjectCmd) Run() (err error) {
-	err = c.writeFile(".golangci.yaml", func(fd io.Writer) error {
+	err = WriteToFile(c.rootDir, ".golangci.yaml", func(fd io.Writer) error {
 		_, err1 := fd.Write(golangciYaml)
 
 		return err1
@@ -73,8 +73,8 @@ func (c *GoProjectCmd) Run() (err error) {
 		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
 	}
 
-	err = c.writeFile(".github/workflows/test-and-lint.yaml", func(fd io.Writer) error {
-		t, err1 := template.New("test-and-lint.yaml").Parse(testAndLintYaml)
+	err = WriteToFile(c.rootDir, ".github/workflows/test-and-lint.yaml", func(fd io.Writer) error {
+		t, err1 := template.New("test-and-lint.yaml").Parse(goTestAndLintYaml)
 		if err1 != nil {
 			return fmt.Errorf("failed to load template for test-and-lint.yaml: %w", err1)
 		}
@@ -85,7 +85,7 @@ func (c *GoProjectCmd) Run() (err error) {
 		return err
 	}
 
-	err = c.writeFile("go.mod", func(fd io.Writer) error {
+	err = WriteToFile(c.rootDir, "go.mod", func(fd io.Writer) error {
 		goModFile := new(modfile.File)
 
 		err1 := goModFile.AddModuleStmt(c.ModulePath)
