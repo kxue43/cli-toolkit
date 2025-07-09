@@ -68,7 +68,7 @@ func (c *GoProjectCmd) Run() (err error) {
 		return err
 	}
 
-	err = os.MkdirAll(".github/workflows", 0750)
+	err = os.MkdirAll(filepath.Clean(filepath.Join(c.rootDir, ".github/workflows")), 0750)
 	if err != nil {
 		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
 	}

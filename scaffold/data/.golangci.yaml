@@ -77,7 +77,6 @@ linters:
             - pkg: github.com/gofiber/fiber
               desc: This web framework doesn't fully support the http.Handler interface.
     errcheck:
-      check-blank: true
       check-type-assertions: true
     govet:
       enable-all: true
