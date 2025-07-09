@@ -21,10 +21,10 @@ type (
 )
 
 var (
-	//go:embed "data/.golangci.yaml"
+	//go:embed "data/go/.golangci.yaml"
 	golangciYaml []byte
 
-	//go:embed "data/test-and-lint.yaml"
+	//go:embed "data/go/test-and-lint.yaml"
 	goTestAndLintYaml string
 )
 

@@ -70,7 +70,7 @@ func TestGoProject(t *testing.T) {
 
 	defer func() { _ = fd2.Close() }()
 
-	fd3, err := os.Open(filepath.Clean(filepath.Join("data", ".golangci.yaml")))
+	fd3, err := os.Open(filepath.Clean(filepath.Join("data/go", ".golangci.yaml")))
 	require.NoError(t, err)
 
 	defer func() { _ = fd3.Close() }()
