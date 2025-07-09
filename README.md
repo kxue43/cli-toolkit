@@ -1,12 +1,14 @@
 # Personal CLI Toolkit
 
-## Installation commands
+Toolkit of various CLI programs that aid my own workflows.
 
-The `toolkit` CLI.
-
-The `toolkit assume-role` command only works on Linux or macOS because it needs to read and write `/dev/tty`.
-Other commands work on all operating systems.
+## Installation
 
 ```bash
 go install github.com/kxue43/cli-toolkit/cmd/toolkit@latest
 ```
+
+## Usage
+
+The `toolkit assume-role` command only works on Linux or macOS because it needs to read and write `/dev/tty`.
+Other commands work on all operating systems.
