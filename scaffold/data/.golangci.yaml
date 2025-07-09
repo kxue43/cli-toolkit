@@ -94,12 +94,6 @@ linters:
       branch-max-lines: 4
   exclusions:
     generated: lax
-    rules:
-      - path: '^auth/cache\.go$'
-        linters:
-          - gosec
-        # crypto/sha1 is used for hashing, not encryption. 
-        text: "weak cryptographic primitive"
     paths:
       - adhoc/
 
