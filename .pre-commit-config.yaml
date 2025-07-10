@@ -5,3 +5,8 @@ repos:
       - id: golangci-lint-config-verify
       - id: golangci-lint-fmt
       - id: golangci-lint-full
+
+  - repo: https://github.com/godaddy/tartufo
+    rev: v5.0.2
+    hooks:
+      - id: tartufo
