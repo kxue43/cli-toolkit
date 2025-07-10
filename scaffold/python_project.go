@@ -10,20 +10,20 @@ import (
 
 var pypiURL = "https://pypi.org/pypi"
 
-func PackageLatestVersion(name string) (version string, err error) {
+func PyPIPackageLatestVersion(name string) (version string, err error) {
 	resp, err := http.Get(fmt.Sprintf("%s/%s/json", pypiURL, name))
 	if err != nil {
 		return version, fmt.Errorf("failed to get package %q data from PyPI: %w", name, err)
-	}
-
-	if rc := resp.StatusCode; rc != 200 {
-		return "", fmt.Errorf("failed to get package %q data, status code %d", name, rc)
 	}
 
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
+
+	if rc := resp.StatusCode; rc != 200 {
+		return "", fmt.Errorf("failed to get package %q data, status code %d", name, rc)
+	}
 
 	angler, err := jsonstream.NewAngler(resp.Body, ".info.version")
 	if err != nil {

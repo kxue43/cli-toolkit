@@ -34,14 +34,11 @@ func WriteToFile(dir, name string, hook func(io.Writer) error) (err error) {
 		return fmt.Errorf("failed to create %q file: %w", name, err)
 	}
 
+	defer func() { _ = fd.Close() }()
+
 	err = hook(fd)
 	if err != nil {
 		return fmt.Errorf("failed to write to %q: %w", name, err)
-	}
-
-	err = fd.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close %q after writing: %w", name, err)
 	}
 
 	return nil
