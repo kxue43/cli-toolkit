@@ -1,10 +1,14 @@
 package scaffold
 
 import (
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"text/template"
 
 	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
@@ -82,4 +86,41 @@ func TestGoProject(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, contents3, contents2)
+}
+
+func TestPackageLatestVersion(t *testing.T) {
+	var path string
+
+	pack := "black"
+	version := "25.1.0"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+
+		path = r.URL.Path
+
+		contents, err := os.ReadFile(fmt.Sprintf("testdata/pypi.%s.resp.json", pack))
+		require.NoError(t, err)
+
+		tmplt, err := template.New("response").Parse(string(contents))
+		require.NoError(t, err)
+
+		err = tmplt.Execute(w, version)
+		require.NoError(t, err)
+	}))
+
+	defer ts.Close()
+
+	original := pypiURL
+	pypiURL = ts.URL
+
+	defer func() {
+		pypiURL = original
+	}()
+
+	v, err1 := PackageLatestVersion(pack)
+
+	require.NoError(t, err1)
+	assert.Equal(t, version, v)
+	assert.Equal(t, fmt.Sprintf("/%s/json", pack), path)
 }
