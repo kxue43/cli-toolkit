@@ -85,6 +85,28 @@ func TestLand(t *testing.T) {
 				"here",
 			},
 		},
+		{
+			contents: `
+			{
+				"a": "b",
+				"b": "x",
+				"c": [1, 2],
+				"d": {
+					"e": "f",
+					"f": "y"
+				},
+				"g": "z"
+			}
+			`,
+			paths: []string{
+				".b",
+				".d.f",
+			},
+			expected: []any{
+				"x",
+				"y",
+			},
+		},
 	}
 
 	for _, test := range tests {
