@@ -9,6 +9,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yaml"
+      - "scaffold/data/**"
+      - "**/testdata/**"
 
   pull_request:
     paths:
@@ -16,6 +18,8 @@ on:
       - "go.mod"
       - "go.sum"
       - ".golangci.yaml"
+      - "scaffold/data/**"
+      - "**/testdata/**"
 
   workflow_dispatch:
 
