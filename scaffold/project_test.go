@@ -137,3 +137,41 @@ func TestPyPIPackageLatestVersion(t *testing.T) {
 	assert.Equal(t, version, v)
 	assert.Equal(t, fmt.Sprintf("/%s/json", pack), path)
 }
+
+func TestGitHubProjectLatestReleaseTag(t *testing.T) {
+	var path string
+
+	owner := "golangci"
+	repo := "golangci-lint"
+	tag := "v2.2.2"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+
+		path = r.URL.Path
+
+		contents, err := os.ReadFile(fmt.Sprintf("testdata/github.%s.resp.json", repo))
+		require.NoError(t, err)
+
+		tmplt, err := template.New("response").Parse(string(contents))
+		require.NoError(t, err)
+
+		err = tmplt.Execute(w, tag)
+		require.NoError(t, err)
+	}))
+
+	defer ts.Close()
+
+	original := githubAPIBaseURL
+	githubAPIBaseURL = ts.URL
+
+	defer func() {
+		githubAPIBaseURL = original
+	}()
+
+	v, err1 := GitHubProjectLatestReleaseTag(owner, repo)
+
+	require.NoError(t, err1)
+	assert.Equal(t, tag, v)
+	assert.Equal(t, fmt.Sprintf("/%s/%s/releases/latest", owner, repo), path)
+}

@@ -5,3 +5,5 @@ dist/**/*
 /toolkit
 /mdmak
 /coverage.out
+/temp*.json
+/temp*.yaml

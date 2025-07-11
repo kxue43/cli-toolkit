@@ -43,6 +43,8 @@ var (
 	goTartufoToml []byte
 
 	pypiURL = "https://pypi.org/pypi"
+
+	githubAPIBaseURL = "https://api.github.com/repos"
 )
 
 func FromData(data []byte) WriteHook {
@@ -105,10 +107,10 @@ func WriteToFile(dir, name string, hook WriteHook) (err error) {
 	return nil
 }
 
-func PyPIPackageLatestVersion(name string) (version string, err error) {
-	resp, err := http.Get(fmt.Sprintf("%s/%s/json", pypiURL, name))
+func landFromPublicEndpoint(url, path string) (value string, err error) {
+	resp, err := http.Get(url) //nolint:gosec // url is only provided by own code
 	if err != nil {
-		return version, fmt.Errorf("failed to get package %q data from PyPI: %w", name, err)
+		return "", fmt.Errorf("failed to GET from endpoint %q: %w", url, err)
 	}
 
 	defer func() {
@@ -117,25 +119,33 @@ func PyPIPackageLatestVersion(name string) (version string, err error) {
 	}()
 
 	if rc := resp.StatusCode; rc != 200 {
-		return "", fmt.Errorf("failed to get package %q data, status code %d", name, rc)
+		return "", fmt.Errorf("failed to GET from endpoint %q, status code %d", url, rc)
 	}
 
-	angler, err := jsonstream.NewAngler(resp.Body, ".info.version")
+	angler, err := jsonstream.NewAngler(resp.Body, path)
 	if err != nil {
 		return "", fmt.Errorf("error from jsonstream.NewAngler: %w", err)
 	}
 
-	value, err := angler.Land()
+	v, err := angler.Land()
 	if err != nil {
-		return "", fmt.Errorf(`failed to get the value at the ".info.version" path from the response body: %w`, err)
+		return "", fmt.Errorf(`failed to get the value at the %q path from the response body: %w`, path, err)
 	}
 
-	version, ok := value.(string)
+	value, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf(`the value at the ".info.version" path is not string`)
+		return "", fmt.Errorf(`the value at the %q path is not string`, path)
 	}
 
-	return version, nil
+	return value, nil
+}
+
+func GitHubProjectLatestReleaseTag(owner, repo string) (tag string, err error) {
+	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIBaseURL, owner, repo), ".tag_name")
+}
+
+func PyPIPackageLatestVersion(name string) (version string, err error) {
+	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
 }
 
 func (c *GoProjectCmd) AfterApply() error {
