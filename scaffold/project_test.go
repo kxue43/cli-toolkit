@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -28,6 +29,16 @@ type (
 
 	Workflow struct {
 		Jobs map[string]Job `yaml:"jobs"`
+	}
+
+	PreCommitConfig struct {
+		Repos []struct {
+			Repo  string `yaml:"repo"`
+			Rev   string `yaml:"rev"`
+			Hooks []struct {
+				Id string `yaml:"id"`
+			} `yaml:"hooks"`
+		} `yaml:"repos"`
 	}
 )
 
@@ -63,13 +74,31 @@ func TestGoProject(t *testing.T) {
 	assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
 	assert.Equal(t, "v"+cmd.GolangcilintVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
 
-	contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".golangci.yaml")))
+	contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 	require.NoError(t, err)
 
-	contents1, err := os.ReadFile(filepath.Clean(filepath.Join("data/go", ".golangci.yaml")))
+	var preCommitConfig PreCommitConfig
+
+	err = yaml.Unmarshal(contents, &preCommitConfig)
 	require.NoError(t, err)
 
-	assert.Equal(t, contents1, contents)
+	assert.Equal(t, "v"+cmd.GolangcilintVersion, preCommitConfig.Repos[0].Rev)
+	assert.Equal(t, "v"+cmd.TartufoVersion, preCommitConfig.Repos[1].Rev)
+
+	for _, hook := range preCommitConfig.Repos[0].Hooks {
+		assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
+	}
+
+	files := []string{".golangci.yaml", "Makefile", "tartufo.toml"}
+	for _, name := range files {
+		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
+		require.NoError(t, err)
+
+		contents1, err := os.ReadFile(filepath.Clean(filepath.Join("data/go", name)))
+		require.NoError(t, err)
+
+		assert.Equal(t, contents1, contents)
+	}
 }
 
 func TestPyPIPackageLatestVersion(t *testing.T) {
