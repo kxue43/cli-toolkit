@@ -1,10 +1,14 @@
 package scaffold
 
 import (
-	"io"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +29,16 @@ type (
 
 	Workflow struct {
 		Jobs map[string]Job `yaml:"jobs"`
+	}
+
+	PreCommitConfig struct {
+		Repos []struct {
+			Repo  string `yaml:"repo"`
+			Rev   string `yaml:"rev"`
+			Hooks []struct {
+				Id string `yaml:"id"`
+			} `yaml:"hooks"`
+		} `yaml:"repos"`
 	}
 )
 
@@ -49,37 +63,77 @@ func TestGoProject(t *testing.T) {
 	err = cmd.Run()
 	require.NoError(t, err)
 
-	fd1, err := os.Open(filepath.Clean(filepath.Join(tempDir, ".github/workflows", "test-and-lint.yaml")))
-	require.NoError(t, err)
-
-	defer func() { _ = fd1.Close() }()
-
-	contents1, err := io.ReadAll(fd1)
+	contents, err := os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github/workflows", "test-and-lint.yaml")))
 	require.NoError(t, err)
 
 	var workflow Workflow
 
-	err = yaml.Unmarshal(contents1, &workflow)
+	err = yaml.Unmarshal(contents, &workflow)
 	require.NoError(t, err)
 
 	assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
 	assert.Equal(t, "v"+cmd.GolangcilintVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
 
-	fd2, err := os.Open(filepath.Clean(filepath.Join(tempDir, ".golangci.yaml")))
+	contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 	require.NoError(t, err)
 
-	defer func() { _ = fd2.Close() }()
+	var preCommitConfig PreCommitConfig
 
-	fd3, err := os.Open(filepath.Clean(filepath.Join("data", ".golangci.yaml")))
+	err = yaml.Unmarshal(contents, &preCommitConfig)
 	require.NoError(t, err)
 
-	defer func() { _ = fd3.Close() }()
+	assert.Equal(t, "v"+cmd.GolangcilintVersion, preCommitConfig.Repos[0].Rev)
+	assert.Equal(t, "v"+cmd.TartufoVersion, preCommitConfig.Repos[1].Rev)
 
-	contents2, err := io.ReadAll(fd2)
-	require.NoError(t, err)
+	for _, hook := range preCommitConfig.Repos[0].Hooks {
+		assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
+	}
 
-	contents3, err := io.ReadAll(fd3)
-	require.NoError(t, err)
+	files := []string{".golangci.yaml", "Makefile", "tartufo.toml"}
+	for _, name := range files {
+		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
+		require.NoError(t, err)
 
-	assert.Equal(t, contents3, contents2)
+		contents1, err := os.ReadFile(filepath.Clean(filepath.Join("data/go", name)))
+		require.NoError(t, err)
+
+		assert.Equal(t, contents1, contents)
+	}
+}
+
+func TestPyPIPackageLatestVersion(t *testing.T) {
+	var path string
+
+	pack := "black"
+	version := "25.1.0"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+
+		path = r.URL.Path
+
+		contents, err := os.ReadFile(fmt.Sprintf("testdata/pypi.%s.resp.json", pack))
+		require.NoError(t, err)
+
+		tmplt, err := template.New("response").Parse(string(contents))
+		require.NoError(t, err)
+
+		err = tmplt.Execute(w, version)
+		require.NoError(t, err)
+	}))
+
+	defer ts.Close()
+
+	original := pypiURL
+	pypiURL = ts.URL
+
+	defer func() {
+		pypiURL = original
+	}()
+
+	v, err1 := PyPIPackageLatestVersion(pack)
+
+	require.NoError(t, err1)
+	assert.Equal(t, version, v)
+	assert.Equal(t, fmt.Sprintf("/%s/json", pack), path)
 }
