@@ -64,6 +64,31 @@ func FromTemplate(name, text string, data any) WriteHook {
 	}
 }
 
+func ToModFile(modulePath, goVersion string) WriteHook {
+	return func(fd io.Writer) error {
+		goModFile := new(modfile.File)
+
+		err := goModFile.AddModuleStmt(modulePath)
+		if err != nil {
+			return fmt.Errorf("failed to format starter go.mod file: %w", err)
+		}
+
+		err = goModFile.AddGoStmt(goVersion)
+		if err != nil {
+			return fmt.Errorf("failed to format starter go.mod file: %w", err)
+		}
+
+		contents, err := goModFile.Format()
+		if err != nil {
+			return fmt.Errorf("failed to format starter go.mod file: %w", err)
+		}
+
+		_, err = fd.Write(contents)
+
+		return err
+	}
+}
+
 func WriteToFile(dir, name string, hook WriteHook) (err error) {
 	fd, err := os.Create(filepath.Clean(filepath.Join(dir, name)))
 	if err != nil {
@@ -125,10 +150,6 @@ func (c *GoProjectCmd) AfterApply() error {
 }
 
 func (c *GoProjectCmd) Run() (err error) {
-	if err = WriteToFile(c.rootDir, ".golangci.yaml", FromData(golangciYaml)); err != nil {
-		return err
-	}
-
 	err = os.MkdirAll(filepath.Clean(filepath.Join(c.rootDir, ".github/workflows")), 0750)
 	if err != nil {
 		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
@@ -138,28 +159,14 @@ func (c *GoProjectCmd) Run() (err error) {
 		return err
 	}
 
-	err = WriteToFile(c.rootDir, "go.mod", func(fd io.Writer) error {
-		goModFile := new(modfile.File)
+	if err = WriteToFile(c.rootDir, ".golangci.yaml", FromData(golangciYaml)); err != nil {
+		return err
+	}
 
-		err1 := goModFile.AddModuleStmt(c.ModulePath)
-		if err != nil {
-			return fmt.Errorf("failed to format starter go.mod file: %w", err1)
-		}
+	if err = WriteToFile(c.rootDir, "go.mod", ToModFile(c.ModulePath, c.GoVersion)); err != nil {
+		return err
+	}
 
-		err1 = goModFile.AddGoStmt(c.GoVersion)
-		if err != nil {
-			return fmt.Errorf("failed to format starter go.mod file: %w", err1)
-		}
-
-		contents, err1 := goModFile.Format()
-		if err1 != nil {
-			return fmt.Errorf("failed to format starter go.mod file: %w", err1)
-		}
-
-		_, err1 = fd.Write(contents)
-
-		return err1
-	})
 	if err = WriteToFile(c.rootDir, "Makefile", FromData(goMakefile)); err != nil {
 		return err
 	}
@@ -172,5 +179,5 @@ func (c *GoProjectCmd) Run() (err error) {
 		return err
 	}
 
-	return err
+	return nil
 }
