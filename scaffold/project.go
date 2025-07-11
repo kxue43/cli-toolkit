@@ -19,8 +19,8 @@ type (
 		rootDir             string
 		ModulePath          string `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
-		GolangcilintVersion string `name:"golangci-lint-version" default:"2.2.1" help:"Will appear in .pre-commit-config.yaml GitHub Actions workflow."`
-		TartufoVersion      string `name:"tartufo-version" default:"5.0.2" help:"Will appear in .pre-commit-config.yaml."`
+		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml GitHub Actions workflow."`
+		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
 	}
 
 	WriteHook func(io.Writer) error
@@ -155,6 +155,20 @@ func (c *GoProjectCmd) AfterApply() error {
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
+
+	version, err := GitHubProjectLatestReleaseTag("golangci", "golangci-lint")
+	if err != nil {
+		return fmt.Errorf("failed to fetch the latest version of golangci-lint from GitHub: %w", err)
+	}
+
+	c.GolangcilintVersion = version
+
+	version, err = GitHubProjectLatestReleaseTag("godaddy", "tartufo")
+	if err != nil {
+		return fmt.Errorf("failed to fetch the latest version of tartufo from GitHub: %w", err)
+	}
+
+	c.TartufoVersion = version
 
 	return nil
 }

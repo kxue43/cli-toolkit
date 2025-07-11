@@ -41,4 +41,4 @@ jobs:
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: "v{{.GolangcilintVersion}}"
+          version: "{{.GolangcilintVersion}}"

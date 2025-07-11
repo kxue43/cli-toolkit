@@ -49,16 +49,61 @@ func TestGoProject(t *testing.T) {
 	defer func() {
 		t.Helper()
 
-		err = os.RemoveAll(tempDir)
-		require.NoError(t, err)
+		err1 := os.RemoveAll(tempDir)
+		require.NoError(t, err1)
+	}()
+
+	tartufoVersion := "v5.0.2"
+	golangciLintVersion := "v2.2.2"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+
+		var name, tag string
+
+		path := r.URL.Path
+
+		if strings.HasSuffix(path, "tartufo/releases/latest") {
+			name = "tartufo"
+			tag = tartufoVersion
+		} else if strings.HasSuffix(path, "golangci-lint/releases/latest") {
+			name = "golangci-lint"
+			tag = golangciLintVersion
+		} else {
+			t.Errorf("received unexpected url path %q", path)
+		}
+
+		contents, err1 := os.ReadFile(fmt.Sprintf("testdata/github.%s.resp.json", name))
+		require.NoError(t, err1)
+
+		tmplt, err1 := template.New("response").Parse(string(contents))
+		require.NoError(t, err1)
+
+		err1 = tmplt.Execute(w, tag)
+		require.NoError(t, err1)
+	}))
+
+	defer ts.Close()
+
+	o1 := pypiURL
+	o2 := githubAPIBaseURL
+	pypiURL = ts.URL
+	githubAPIBaseURL = ts.URL
+
+	defer func() {
+		pypiURL = o1
+		githubAPIBaseURL = o2
 	}()
 
 	cmd := GoProjectCmd{
-		rootDir:             tempDir,
-		ModulePath:          "module-path",
-		GoVersion:           "1.24.5",
-		GolangcilintVersion: "2.1.0",
+		ModulePath: "module-path",
+		GoVersion:  "1.24.5",
 	}
+
+	err = cmd.AfterApply()
+	require.NoError(t, err)
+
+	cmd.rootDir = tempDir
 
 	err = cmd.Run()
 	require.NoError(t, err)
@@ -72,7 +117,7 @@ func TestGoProject(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
-	assert.Equal(t, "v"+cmd.GolangcilintVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
+	assert.Equal(t, golangciLintVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
 
 	contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 	require.NoError(t, err)
@@ -82,8 +127,8 @@ func TestGoProject(t *testing.T) {
 	err = yaml.Unmarshal(contents, &preCommitConfig)
 	require.NoError(t, err)
 
-	assert.Equal(t, "v"+cmd.GolangcilintVersion, preCommitConfig.Repos[0].Rev)
-	assert.Equal(t, "v"+cmd.TartufoVersion, preCommitConfig.Repos[1].Rev)
+	assert.Equal(t, golangciLintVersion, preCommitConfig.Repos[0].Rev)
+	assert.Equal(t, tartufoVersion, preCommitConfig.Repos[1].Rev)
 
 	for _, hook := range preCommitConfig.Repos[0].Hooks {
 		assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
