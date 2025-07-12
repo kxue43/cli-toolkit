@@ -1,0 +1,40 @@
+name: Python - Lint on PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**.py'
+      - 'tests/**.py'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+
+  workflow_call:
+
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "{% .PythonVersion %}"
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit hooks 
+        run: pre-commit run --show-diff-on-failure --color=never --all-files --hook-stage=pre-commit

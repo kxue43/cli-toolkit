@@ -1,0 +1,43 @@
+{
+  "url": "https://api.github.com/repos/godaddy/tartufo/releases/180556404",
+  "assets_url": "https://api.github.com/repos/godaddy/tartufo/releases/180556404/assets",
+  "upload_url": "https://uploads.github.com/repos/godaddy/tartufo/releases/180556404/assets{?name,label}",
+  "html_url": "https://github.com/godaddy/tartufo/releases/tag/v5.0.2",
+  "id": 180556404,
+  "author": {
+    "login": "rbailey-godaddy",
+    "id": 72747501,
+    "node_id": "MDQ6VXNlcjcyNzQ3NTAx",
+    "avatar_url": "https://avatars.githubusercontent.com/u/72747501?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/rbailey-godaddy",
+    "html_url": "https://github.com/rbailey-godaddy",
+    "followers_url": "https://api.github.com/users/rbailey-godaddy/followers",
+    "following_url": "https://api.github.com/users/rbailey-godaddy/following{/other_user}",
+    "gists_url": "https://api.github.com/users/rbailey-godaddy/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/rbailey-godaddy/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/rbailey-godaddy/subscriptions",
+    "organizations_url": "https://api.github.com/users/rbailey-godaddy/orgs",
+    "repos_url": "https://api.github.com/users/rbailey-godaddy/repos",
+    "events_url": "https://api.github.com/users/rbailey-godaddy/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/rbailey-godaddy/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "node_id": "RE_kwDODSGVaM4KwxJ0",
+  "tag_name": "{{.}}",
+  "target_commitish": "main",
+  "name": "Version 5.0.2",
+  "draft": false,
+  "immutable": false,
+  "prerelease": false,
+  "created_at": "2024-10-17T23:13:45Z",
+  "published_at": "2024-10-17T23:16:06Z",
+  "assets": [
+
+  ],
+  "tarball_url": "https://api.github.com/repos/godaddy/tartufo/tarball/v5.0.2",
+  "zipball_url": "https://api.github.com/repos/godaddy/tartufo/zipball/v5.0.2",
+  "body": "* [#539](https://github.com/godaddy/tartufo/pull/539) - Add support for python 3.13, and update dependencies to latest versions."
+}

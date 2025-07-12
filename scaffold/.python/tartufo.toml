@@ -1,0 +1,14 @@
+[tool.tartufo]
+repo-path = "."
+regex = true
+entropy = true
+
+exclude-path-patterns = [
+    {path-pattern = 'poetry\.lock$', reason = 'Lock file with lots of digests'},
+    {path-pattern = 'pyproject\.toml$', reason = 'Standard Python project config file'},
+    {path-pattern = 'tartufo\.toml$', reason = 'Tartufo config file'},
+]
+
+exclude-signatures = [
+    # {signature = "hash value", reason = "false positive of high entropy in <***>"},
+]

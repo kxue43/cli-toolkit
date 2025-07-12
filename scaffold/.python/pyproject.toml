@@ -1,0 +1,72 @@
+[project]
+name = "{% .ProjectName %}"
+version = "0.1.0"
+authors = [
+    { name = "Ke Xue", email = "xueke.kent@gmail.com" },
+]
+description = "{% .Description %}"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = "~{% .PythonVersion %}"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+{% .ProjectName | DashLower %} = ["py.typed"]
+
+[tool.poetry]
+packages = [{ include = "**/*", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "~{% .PythonVersion %}"
+
+[tool.poetry.group.develop]
+optional = false
+
+[tool.poetry.group.develop.dependencies]
+ipykernel = "^{% .IPyKernelVersion %}"
+
+[tool.poetry.group.linting]
+optional = false
+
+[tool.poetry.group.linting.dependencies]
+black = "{% .BlackVersion %}" # This version must be the same as in `./.pre-commit-config.yaml`.
+flake8 = "{% .Flake8Version %}" # This version must be the same as in `./.pre-commit-config.yaml`.
+mypy = "^{% .MypyVersion %}"
+
+[tool.poetry.group.test]
+optional = false
+
+[tool.poetry.group.test.dependencies]
+pytest = "^{% .PytestVersion %}"
+pytest-mock = "^{% .PytestMockVersion %}"
+pytest-cov = "^{% .PytestCovVersion %}"
+
+[tool.poetry.group.docs]
+optional = false
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^{% .SphinxVersion %}"
+sphinx-rtd-theme = "*"
+sphinx-autodoc-typehints = "*"
+sphinx-copybutton = "*"
+
+[tool.black]
+line-length = 88
+target-version = ["py{% .PythonVersion.NumsOnly %}"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src --cov-report term-missing"
