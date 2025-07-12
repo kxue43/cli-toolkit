@@ -1,0 +1,22 @@
+{
+  "name": "site-on-server",
+  "version": "0.1.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": ">=2.0.15"
+  },
+  "dependencies": {
+    "express": ">=4.17.2"
+  },
+  "type": "module",
+  "nodemonConfig": {
+    "ext": "html",
+    "watch": ["_build/html/"]
+  }
+}

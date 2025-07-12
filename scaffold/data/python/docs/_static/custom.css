@@ -1,0 +1,11 @@
+.wy-nav-content {
+  max-width: 62.5rem !important;
+}
+
+button.copybtn {
+  opacity: 1;
+}
+
+dl.py.property {
+  display: block !important;
+}

@@ -1,0 +1,58 @@
+name: Unit Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**.py'
+      - 'tests/**'
+      - 'poetry.lock'
+
+  pull_request:
+    paths:
+      - 'src/**.py'
+      - 'tests/**'
+      - 'poetry.lock'
+
+  workflow_call:
+
+  workflow_dispatch:
+
+concurrency: 
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Get poetry from cache
+        id: poetry-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/pipx/venvs/poetry/**
+          key: default-branch-poetry-cache
+
+      - name: Install poetry if cache misses
+        if: ${{ steps.poetry-cache.outputs.cache-hit != 'true' }}
+        run: PIPX_HOME=$GITHUB_WORKSPACE/pipx pipx install poetry
+
+      - name: Add poetry executable to PATH
+        run: echo "$GITHUB_WORKSPACE/pipx/venvs/poetry/bin" >> $GITHUB_PATH
+
+      - name: Set up Python and cache poetry install
+        uses: actions/setup-python@v5
+        with:
+          python-version: '{% .PythonVersion %}'
+          cache: 'poetry'
+
+      - name: Install dependencies with poetry
+        run: poetry install
+
+      - name: Run unit test
+        run: poetry run pytest
