@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "^{{.GoVersion}}"
+          go-version: "^{% .GoVersion %}"
       
       - name: Display Go version
         run: go version
@@ -41,4 +41,4 @@ jobs:
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: "{{.GolangcilintVersion}}"
+          version: "{% .GolangcilintVersion %}"

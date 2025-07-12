@@ -1,12 +1,15 @@
 package scaffold
 
 import (
-	_ "embed"
+	"embed"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"text/template"
 
 	"golang.org/x/mod/modfile"
@@ -27,44 +30,16 @@ type (
 )
 
 var (
-	//go:embed "data/go/.golangci.yaml"
-	golangciYaml []byte
+	// //go:embed ".python/*"
+	// pythonFS embed.FS
 
-	//go:embed "data/go/test-and-lint.yaml"
-	goTestAndLintYaml string
-
-	//go:embed "data/go/.pre-commit-config.yaml"
-	goPreCommitConfigYaml string
-
-	//go:embed "data/go/Makefile"
-	goMakefile []byte
-
-	//go:embed "data/go/tartufo.toml"
-	goTartufoToml []byte
+	//go:embed ".go/*"
+	goFS embed.FS
 
 	pypiURL = "https://pypi.org/pypi"
 
 	githubAPIBaseURL = "https://api.github.com/repos"
 )
-
-func FromData(data []byte) WriteHook {
-	return func(fd io.Writer) error {
-		_, err := fd.Write(data)
-
-		return err
-	}
-}
-
-func FromTemplate(name, text string, data any) WriteHook {
-	return func(fd io.Writer) error {
-		t, err := template.New(name).Parse(text)
-		if err != nil {
-			return fmt.Errorf("failed to load template for %s: %w", name, err)
-		}
-
-		return t.Execute(fd, data)
-	}
-}
 
 func ToModFile(modulePath, goVersion string) WriteHook {
 	return func(fd io.Writer) error {
@@ -148,58 +123,148 @@ func PyPIPackageLatestVersion(name string) (version string, err error) {
 	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
 }
 
+func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err error) {
+	var items []fs.DirEntry
+
+	srcDirs := make([]string, 1, 2)
+	srcFiles := make([]string, 0, 5)
+
+	if _, err = srcFS.ReadDir(srcPrefix); err != nil {
+		return fmt.Errorf("%q is not a directory of data files: %w", srcPrefix, err)
+	}
+
+	srcDirs[0] = srcPrefix
+
+	var srcDir, newDestDir string
+
+	for len(srcDirs) > 0 {
+		srcDir = srcDirs[0]
+
+		items, err = srcFS.ReadDir(srcDir)
+		if err != nil {
+			return fmt.Errorf("failed to open the relative directory %q in data files tree: %w", srcDir, err)
+		}
+
+		for _, item := range items {
+			if item.IsDir() {
+				newSrcDir := filepath.Clean(filepath.Join(srcDir, item.Name()))
+				srcDirs = append(srcDirs, newSrcDir)
+
+				newDestDir, err = filepath.Rel(srcPrefix, newSrcDir)
+				if err != nil {
+					return fmt.Errorf("erroneous directory %q from data files tree: %w", newSrcDir, err)
+				}
+
+				if err = os.MkdirAll(filepath.Clean(filepath.Join(dest, newDestDir)), 0750); err != nil {
+					return fmt.Errorf("failed to create directory %q in destination folder: %w", newDestDir, err)
+				}
+
+				continue
+			}
+
+			srcFiles = append(srcFiles, filepath.Clean(filepath.Join(srcDir, item.Name())))
+		}
+
+		srcDirs = srcDirs[1:]
+	}
+
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 7)
+	out := make(chan error)
+
+	tmplt, err := template.New("entry").Delims("{%", "%}").ParseFS(srcFS, srcFiles...)
+	if err != nil {
+		return fmt.Errorf("failed to parse data files as templates: %w", err)
+	}
+
+	for _, srcFile := range srcFiles {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			destFile, err1 := filepath.Rel(srcPrefix, srcFile)
+			if err1 != nil {
+				out <- fmt.Errorf("name of the data file %q does not start with prefix %q: %w", srcFile, srcPrefix, err1)
+
+				return
+			}
+
+			err1 = WriteToFile(dest, destFile, func(fd io.Writer) error {
+				return tmplt.ExecuteTemplate(fd, filepath.Base(srcFile), data)
+			})
+			if err1 != nil {
+				out <- fmt.Errorf("failed to create new file from template %q: %w", srcFile, err1)
+
+				return
+			}
+
+			out <- nil
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+
+		close(out)
+	}()
+
+	var errs []error
+
+	for err = range out {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 func (c *GoProjectCmd) AfterApply() error {
-	var err error
+	var err, err1 error
 
 	c.rootDir, err = os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	version, err := GitHubProjectLatestReleaseTag("golangci", "golangci-lint")
-	if err != nil {
-		return fmt.Errorf("failed to fetch the latest version of golangci-lint from GitHub: %w", err)
-	}
+	var wg sync.WaitGroup
 
-	c.GolangcilintVersion = version
+	wg.Add(2)
 
-	version, err = GitHubProjectLatestReleaseTag("godaddy", "tartufo")
-	if err != nil {
-		return fmt.Errorf("failed to fetch the latest version of tartufo from GitHub: %w", err)
-	}
+	go func() {
+		defer wg.Done()
 
-	c.TartufoVersion = version
+		c.GolangcilintVersion, err = GitHubProjectLatestReleaseTag("golangci", "golangci-lint")
+		if err != nil {
+			err = fmt.Errorf("failed to fetch the latest version of golangci-lint from GitHub: %w", err)
+		}
+	}()
 
-	return nil
+	go func() {
+		defer wg.Done()
+
+		c.TartufoVersion, err1 = GitHubProjectLatestReleaseTag("godaddy", "tartufo")
+		if err1 != nil {
+			err1 = fmt.Errorf("failed to fetch the latest version of tartufo from GitHub: %w", err1)
+		}
+	}()
+
+	wg.Wait()
+
+	return errors.Join(err, err1)
 }
 
 func (c *GoProjectCmd) Run() (err error) {
-	err = os.MkdirAll(filepath.Clean(filepath.Join(c.rootDir, ".github/workflows")), 0750)
-	if err != nil {
-		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
-	}
-
-	if err = WriteToFile(c.rootDir, ".github/workflows/test-and-lint.yaml", FromTemplate("test-and-lint.yaml", goTestAndLintYaml, c)); err != nil {
-		return err
-	}
-
-	if err = WriteToFile(c.rootDir, ".golangci.yaml", FromData(golangciYaml)); err != nil {
+	if err = writeFiles(c.rootDir, goFS, ".go", c); err != nil {
 		return err
 	}
 
 	if err = WriteToFile(c.rootDir, "go.mod", ToModFile(c.ModulePath, c.GoVersion)); err != nil {
-		return err
-	}
-
-	if err = WriteToFile(c.rootDir, "Makefile", FromData(goMakefile)); err != nil {
-		return err
-	}
-
-	if err = WriteToFile(c.rootDir, "tartufo.toml", FromData(goTartufoToml)); err != nil {
-		return err
-	}
-
-	if err = WriteToFile(c.rootDir, ".pre-commit-config.yaml", FromTemplate(".pre-commit-config.yaml", goPreCommitConfigYaml, c)); err != nil {
 		return err
 	}
 

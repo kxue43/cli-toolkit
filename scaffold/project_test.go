@@ -139,7 +139,7 @@ func TestGoProject(t *testing.T) {
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
 		require.NoError(t, err)
 
-		contents1, err := os.ReadFile(filepath.Clean(filepath.Join("data/go", name)))
+		contents1, err := os.ReadFile(filepath.Clean(filepath.Join(".go", name)))
 		require.NoError(t, err)
 
 		assert.Equal(t, contents1, contents)
