@@ -1,17 +1,15 @@
 repos:
-  - repo: https://github.com/godaddy/tartufo
-    rev: "{% .TartufoVersion %}"
-    hooks:
-      - id: tartufo
   - repo: https://github.com/psf/black
     rev: "{% .BlackVersion %}"
     hooks:
       - id: black
         language_version: python3.12
+
   - repo: https://github.com/PyCQA/flake8
     rev: "{% .Flake8Version %}"
     hooks:
       - id: flake8
+
   - repo: https://github.com/kxue43/shell-cmd-on-change
     rev: "1.2.0"
     hooks:
@@ -25,3 +23,8 @@ repos:
         stages: [post-merge]
         always_run: true
         verbose: true
+
+  - repo: https://github.com/godaddy/tartufo
+    rev: "{% .TartufoVersion %}"
+    hooks:
+      - id: tartufo

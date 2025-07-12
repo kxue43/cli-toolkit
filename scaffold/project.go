@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -22,16 +24,37 @@ type (
 		rootDir             string
 		ModulePath          string `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
-		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml GitHub Actions workflow."`
+		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
 		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
 	}
 
+	PythonProjectCmd struct {
+		rootDir           string
+		ProjectName       string        `arg:"" required:"" name:"ProjectName" help:"Python project name."`
+		Description       string        `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
+		BlackVersion      string        `name:"black-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and pyproject.toml."`
+		Flake8Version     string        `name:"flake8-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and pyproject.toml."`
+		TartufoVersion    string        `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
+		IPyKernelVersion  string        `name:"ipykernel-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		MypyVersion       string        `name:"mypy-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		PytestVersion     string        `name:"pytest-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		PytestMockVersion string        `name:"pytest-mock-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
+		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
+	}
+
 	WriteHook func(io.Writer) error
+
+	PythonVersion struct {
+		Major string
+		Minor string
+	}
 )
 
 var (
-	// //go:embed ".python/*"
-	// pythonFS embed.FS
+	//go:embed ".python/*"
+	pythonFS embed.FS
 
 	//go:embed ".go/*"
 	goFS embed.FS
@@ -40,6 +63,28 @@ var (
 
 	githubAPIBaseURL = "https://api.github.com/repos"
 )
+
+func (pv *PythonVersion) UnmarshalText(text []byte) error {
+	regex := regexp.MustCompile(`^3\.(\d+)$`)
+
+	m := regex.FindStringSubmatch(string(text))
+	if len(m) == 0 {
+		return fmt.Errorf(`%s is not of the "3.(\d+)" format`, string(text))
+	}
+
+	pv.Major = "3"
+	pv.Minor = m[1]
+
+	return nil
+}
+
+func (pv *PythonVersion) String() string {
+	return pv.Major + "." + pv.Minor
+}
+
+func (pv *PythonVersion) NumsOnly() string {
+	return pv.Major + pv.Minor
+}
 
 func ToModFile(modulePath, goVersion string) WriteHook {
 	return func(fd io.Writer) error {
@@ -123,6 +168,21 @@ func PyPIPackageLatestVersion(name string) (version string, err error) {
 	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
 }
 
+func dashLower(s string) string {
+	return strings.ReplaceAll(s, "-", "_")
+}
+
+func touch(path string) error {
+	fd, err := os.Create(filepath.Clean(path))
+	if err != nil {
+		return fmt.Errorf("failed to create empty file %q: %w", path, err)
+	}
+
+	defer func() { _ = fd.Close() }()
+
+	return nil
+}
+
 func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err error) {
 	var items []fs.DirEntry
 
@@ -173,7 +233,7 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	semaphore := make(chan struct{}, 7)
 	out := make(chan error)
 
-	tmplt, err := template.New("entry").Delims("{%", "%}").ParseFS(srcFS, srcFiles...)
+	tmplt, err := template.New("entry").Delims("{%", "%}").Funcs(template.FuncMap{"DashLower": dashLower}).ParseFS(srcFS, srcFiles...)
 	if err != nil {
 		return fmt.Errorf("failed to parse data files as templates: %w", err)
 	}
@@ -224,7 +284,7 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	return errors.Join(errs...)
 }
 
-func (c *GoProjectCmd) AfterApply() error {
+func (c *GoProjectCmd) BeforeApply() error {
 	var err, err1 error
 
 	c.rootDir, err = os.Getwd()
@@ -265,6 +325,99 @@ func (c *GoProjectCmd) Run() (err error) {
 	}
 
 	if err = WriteToFile(c.rootDir, "go.mod", ToModFile(c.ModulePath, c.GoVersion)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *PythonProjectCmd) BeforeApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	github := []struct {
+		indirect *string
+		owner    string
+		repo     string
+	}{
+		{owner: "psf", repo: "black", indirect: &c.BlackVersion},
+		{owner: "godaddy", repo: "tartufo", indirect: &c.TartufoVersion},
+	}
+
+	pypi := []struct {
+		indirect *string
+		name     string
+	}{
+		{name: "flake8", indirect: &c.Flake8Version},
+		{name: "ipykernel", indirect: &c.IPyKernelVersion},
+		{name: "mypy", indirect: &c.MypyVersion},
+		{name: "pytest", indirect: &c.PytestVersion},
+		{name: "pytest-mock", indirect: &c.PytestMockVersion},
+		{name: "pytest-cov", indirect: &c.PytestCovVersion},
+		{name: "Sphinx", indirect: &c.SphinxVersion},
+	}
+
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 5)
+	errs := make([]error, len(github)+len(pypi))
+
+	for i, gitem := range github {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			*gitem.indirect, errs[i] = GitHubProjectLatestReleaseTag(gitem.owner, gitem.repo)
+			if errs[i] != nil {
+				errs[i] = fmt.Errorf("failed to fetch the latest version of %s from GitHub: %w", gitem.repo, errs[i])
+			}
+		}()
+	}
+
+	for i, pitem := range pypi {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			index := len(github) + i
+
+			*pitem.indirect, errs[index] = PyPIPackageLatestVersion(pitem.name)
+			if errs[index] != nil {
+				errs[index] = fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", pitem.name, errs[index])
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	return errors.Join(errs...)
+}
+
+func (c *PythonProjectCmd) Run() (err error) {
+	if err = writeFiles(c.rootDir, pythonFS, ".python", c); err != nil {
+		return err
+	}
+
+	dir := filepath.Clean(filepath.Join(c.rootDir, "src", dashLower(c.ProjectName)))
+	if err = os.MkdirAll(dir, 0750); err != nil {
+		return fmt.Errorf("failed to create the 'src/%s' directory: %w", dashLower(c.ProjectName), err)
+	}
+
+	if err = touch(filepath.Join(dir, "__init__.py")); err != nil {
+		return err
+	}
+
+	if err = touch(filepath.Join(dir, "py.typed")); err != nil {
 		return err
 	}
 

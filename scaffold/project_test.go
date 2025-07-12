@@ -100,7 +100,7 @@ func TestGoProject(t *testing.T) {
 		GoVersion:  "1.24.5",
 	}
 
-	err = cmd.AfterApply()
+	err = cmd.BeforeApply()
 	require.NoError(t, err)
 
 	cmd.rootDir = tempDir
