@@ -55,18 +55,20 @@ type (
 		Minor string
 	}
 
+	registry int
+
 	versionSetter struct {
 		indirect *string
 		scope    string
 		name     string
-		registry uint
+		registry registry
 	}
 
 	setterFunc func(context.Context) error
 )
 
 const (
-	github = 1 << iota
+	github registry = iota
 	pypi
 	// npm
 )
