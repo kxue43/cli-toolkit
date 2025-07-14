@@ -32,5 +32,5 @@ tartufo:
 	@pre-commit run tartufo
 .PHONY: tartufo
 
-all: test lint fmt
+all: test lint
 .PHONY: all

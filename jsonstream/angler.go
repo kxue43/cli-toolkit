@@ -1,6 +1,7 @@
 package jsonstream
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,11 +61,11 @@ func NewAngler(stream io.Reader, path string) (*Angler, error) {
 	return &Angler{dec: json.NewDecoder(stream), keys: keys}, nil
 }
 
-func (a *Angler) Land() (value any, err error) {
+func (a *Angler) Land(ctx context.Context) (value any, err error) {
 	a.currentPath.WriteString(".")
 
 	for _, key := range a.keys {
-		if err = a.toTargetKey(key); err != nil {
+		if err = a.toTargetKey(ctx, key); err != nil {
 			return nil, err
 		}
 	}
@@ -72,7 +73,7 @@ func (a *Angler) Land() (value any, err error) {
 	return a.getValue()
 }
 
-func (a *Angler) toTargetKey(key string) (err error) {
+func (a *Angler) toTargetKey(ctx context.Context, key string) (err error) {
 	var t json.Token
 
 	// consume the starting '{' token
@@ -88,6 +89,8 @@ func (a *Angler) toTargetKey(key string) (err error) {
 		a.currentPath.WriteString(key)
 	}
 
+	done := ctx.Done()
+
 	// the last token; it always starts with '{'
 	last := t
 	// level of the current token; start with -1 as there's no "current" token in the beginning
@@ -96,6 +99,13 @@ func (a *Angler) toTargetKey(key string) (err error) {
 	count := 0
 
 	for level > 0 || a.dec.More() {
+		// check for context expiration
+		select {
+		case <-done:
+			return fmt.Errorf("failed to find target key %q in time: %w", a.currentPath.String(), context.Cause(ctx))
+		default:
+		}
+
 		// get the next token
 		if t, err = a.dec.Token(); err != nil {
 			return

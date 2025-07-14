@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"golang.org/x/mod/modfile"
 
@@ -26,6 +28,7 @@ type (
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
 		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
 		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
+		TimeoutSeconds      int    `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
@@ -42,6 +45,7 @@ type (
 		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
+		TimeoutSeconds    int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	WriteHook func(io.Writer) error
@@ -50,6 +54,21 @@ type (
 		Major string
 		Minor string
 	}
+
+	versionSetter struct {
+		indirect *string
+		scope    string
+		name     string
+		registry uint
+	}
+
+	setterFunc func(context.Context) error
+)
+
+const (
+	github = 1 << iota
+	pypi
+	// npm
 )
 
 var (
@@ -127,8 +146,13 @@ func WriteToFile(dir, name string, hook WriteHook) (err error) {
 	return nil
 }
 
-func landFromPublicEndpoint(url, path string) (value string, err error) {
-	resp, err := http.Get(url) //nolint:gosec // url is only provided by own code
+func landFromPublicEndpoint(ctx context.Context, url, path string) (value string, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare GET request to endpoint %s: %w", url, err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to GET from endpoint %q: %w", url, err)
 	}
@@ -147,7 +171,7 @@ func landFromPublicEndpoint(url, path string) (value string, err error) {
 		return "", fmt.Errorf("error from jsonstream.NewAngler: %w", err)
 	}
 
-	v, err := angler.Land()
+	v, err := angler.Land(ctx)
 	if err != nil {
 		return "", fmt.Errorf(`failed to get the value at the %q path from the response body: %w`, path, err)
 	}
@@ -160,12 +184,12 @@ func landFromPublicEndpoint(url, path string) (value string, err error) {
 	return value, nil
 }
 
-func GitHubProjectLatestReleaseTag(owner, repo string) (tag string, err error) {
-	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIBaseURL, owner, repo), ".tag_name")
+func GitHubProjectLatestReleaseTag(ctx context.Context, owner, repo string) (tag string, err error) {
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIBaseURL, owner, repo), ".tag_name")
 }
 
-func PyPIPackageLatestVersion(name string) (version string, err error) {
-	return landFromPublicEndpoint(fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
+func PyPIPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
 }
 
 func dashLower(s string) string {
@@ -284,39 +308,77 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	return errors.Join(errs...)
 }
 
-func (c *GoProjectCmd) BeforeApply() error {
-	var err, err1 error
+func (vs *versionSetter) Func(ctx context.Context) (err error) {
+	switch vs.registry {
+	case github:
+		*vs.indirect, err = GitHubProjectLatestReleaseTag(ctx, vs.scope, vs.name)
+		if err != nil {
+			return fmt.Errorf("failed to fetch the latest version of %s/%s from GitHub: %w", vs.scope, vs.name, err)
+		}
+	case pypi:
+		*vs.indirect, err = PyPIPackageLatestVersion(ctx, vs.name)
+		if err != nil {
+			return fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", vs.name, err)
+		}
+	}
 
+	return nil
+}
+
+func getSetterFuncs(vss []*versionSetter) []setterFunc {
+	setterFuncs := make([]setterFunc, 0, len(vss))
+
+	for _, vs := range vss {
+		if *vs.indirect == "LATEST" {
+			setterFuncs = append(setterFuncs, vs.Func)
+		}
+	}
+
+	return setterFuncs
+}
+
+func setVersions(ctx context.Context, fns []setterFunc) error {
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 5)
+	errs := make([]error, len(fns))
+
+	for i, fn := range fns {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			errs[i] = fn(ctx)
+		}()
+	}
+
+	wg.Wait()
+
+	return errors.Join(errs...)
+}
+
+func (c *GoProjectCmd) AfterApply() (err error) {
 	c.rootDir, err = os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	var wg sync.WaitGroup
+	vss := []*versionSetter{
+		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
+		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
+	}
 
-	wg.Add(2)
+	setterFuncs := getSetterFuncs(vss)
 
-	go func() {
-		defer wg.Done()
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
-		c.GolangcilintVersion, err = GitHubProjectLatestReleaseTag("golangci", "golangci-lint")
-		if err != nil {
-			err = fmt.Errorf("failed to fetch the latest version of golangci-lint from GitHub: %w", err)
-		}
-	}()
+	defer cancelFunc()
 
-	go func() {
-		defer wg.Done()
-
-		c.TartufoVersion, err1 = GitHubProjectLatestReleaseTag("godaddy", "tartufo")
-		if err1 != nil {
-			err1 = fmt.Errorf("failed to fetch the latest version of tartufo from GitHub: %w", err1)
-		}
-	}()
-
-	wg.Wait()
-
-	return errors.Join(err, err1)
+	return setVersions(ctx, setterFuncs)
 }
 
 func (c *GoProjectCmd) Run() (err error) {
@@ -331,76 +393,31 @@ func (c *GoProjectCmd) Run() (err error) {
 	return nil
 }
 
-func (c *PythonProjectCmd) BeforeApply() (err error) {
+func (c *PythonProjectCmd) AfterApply() (err error) {
 	c.rootDir, err = os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	github := []struct {
-		indirect *string
-		owner    string
-		repo     string
-	}{
-		{owner: "psf", repo: "black", indirect: &c.BlackVersion},
-		{owner: "godaddy", repo: "tartufo", indirect: &c.TartufoVersion},
+	vss := []*versionSetter{
+		{registry: github, scope: "psf", name: "black", indirect: &c.BlackVersion},
+		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
+		{registry: pypi, name: "flake8", indirect: &c.Flake8Version},
+		{registry: pypi, name: "ipykernel", indirect: &c.IPyKernelVersion},
+		{registry: pypi, name: "mypy", indirect: &c.MypyVersion},
+		{registry: pypi, name: "pytest", indirect: &c.PytestVersion},
+		{registry: pypi, name: "pytest-mock", indirect: &c.PytestMockVersion},
+		{registry: pypi, name: "pytest-cov", indirect: &c.PytestCovVersion},
+		{registry: pypi, name: "Sphinx", indirect: &c.SphinxVersion},
 	}
 
-	pypi := []struct {
-		indirect *string
-		name     string
-	}{
-		{name: "flake8", indirect: &c.Flake8Version},
-		{name: "ipykernel", indirect: &c.IPyKernelVersion},
-		{name: "mypy", indirect: &c.MypyVersion},
-		{name: "pytest", indirect: &c.PytestVersion},
-		{name: "pytest-mock", indirect: &c.PytestMockVersion},
-		{name: "pytest-cov", indirect: &c.PytestCovVersion},
-		{name: "Sphinx", indirect: &c.SphinxVersion},
-	}
+	setterFuncs := getSetterFuncs(vss)
 
-	var wg sync.WaitGroup
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
-	semaphore := make(chan struct{}, 5)
-	errs := make([]error, len(github)+len(pypi))
+	defer cancelFunc()
 
-	for i, gitem := range github {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			*gitem.indirect, errs[i] = GitHubProjectLatestReleaseTag(gitem.owner, gitem.repo)
-			if errs[i] != nil {
-				errs[i] = fmt.Errorf("failed to fetch the latest version of %s from GitHub: %w", gitem.repo, errs[i])
-			}
-		}()
-	}
-
-	for i, pitem := range pypi {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			index := len(github) + i
-
-			*pitem.indirect, errs[index] = PyPIPackageLatestVersion(pitem.name)
-			if errs[index] != nil {
-				errs[index] = fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", pitem.name, errs[index])
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	return errors.Join(errs...)
+	return setVersions(ctx, setterFuncs)
 }
 
 func (c *PythonProjectCmd) Run() (err error) {
