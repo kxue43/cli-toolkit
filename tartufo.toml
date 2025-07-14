@@ -12,4 +12,5 @@ exclude-path-patterns = [
 exclude-signatures = [
     {signature = "1fb71a00116a4e99a52d8856d6fbcea64ecd635f197211136416fd5e331b721e", reason = "false positive of high entropy in path"},
     {signature = "a2e477f53a93e4ac1a590312f7ef48ca6586ffec9d7a7a80a96d2f74a1fb18d7", reason = "false positive of high entropy in path"},
+    {signature = "fc04dc54b6d19ae0fdbba92b67f0b8ab0e00e9d1ab8d51b285ec40940a8bd776", reason = "false positive of high entropy in test data"},
 ]

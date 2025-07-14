@@ -48,9 +48,35 @@ type (
 		TimeoutSeconds    int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
+	TsCdkProjectCmd struct {
+		rootDir                 string
+		ProjectName             string        `arg:"" required:"" name:"ProjectName" help:"TypeScript CDK project name."`
+		EslintVersion           string        `name:"eslint-version" default:"LATEST" help:"Will appear in package.json."`
+		EslintJsVersion         string        `name:"eslint-js-version" default:"LATEST" help:"Will appear in package.json."`
+		TypeScriptEslintVersion string        `name:"typescript-eslint-version" default:"LATEST" help:"Will appear in package.json."`
+		VitestVersion           string        `name:"vitest-version" default:"LATEST" help:"Will appear in package.json."`
+		VitestCoverageV8Version string        `name:"vitest-coverage-v8-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkCliVersion        string        `name:"aws-cdk-cli-version" default:"LATEST" help:"Will appear in package.json."`
+		EsbuildVersion          string        `name:"esbuild-version" default:"LATEST" help:"Will appear in package.json."`
+		PrettierVersion         string        `name:"prettier-version" default:"LATEST" help:"Will appear in package.json."`
+		TsxVersion              string        `name:"tsx-version" default:"LATEST" help:"Will appear in package.json."`
+		TypeScriptVersion       string        `name:"typescript-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkAssertVersion     string        `name:"aws-cdk-assert-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkLibVersion        string        `name:"aws-cdk-lib-version" default:"LATEST" help:"Will appear in package.json."`
+		ConstructsVersion       string        `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
+		YamlVersion             string        `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
+		NodejsVersion           NodejsVersion `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
+		TimeoutSeconds          int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+	}
+
 	WriteHook func(io.Writer) error
 
 	PythonVersion struct {
+		Major string
+		Minor string
+	}
+
+	NodejsVersion struct {
 		Major string
 		Minor string
 	}
@@ -70,19 +96,24 @@ type (
 const (
 	github registry = iota
 	pypi
-	// npm
+	npm
 )
 
 var (
-	//go:embed ".python/*"
-	pythonFS embed.FS
-
 	//go:embed ".go/*"
 	goFS embed.FS
 
-	pypiURL = "https://pypi.org/pypi"
+	//go:embed ".ts.cdk/*"
+	tsCdkFS embed.FS
+
+	//go:embed ".python/*"
+	pythonFS embed.FS
 
 	githubAPIBaseURL = "https://api.github.com/repos"
+
+	npmAPIBaseUrl = "https://registry.npmjs.org"
+
+	pypiURL = "https://pypi.org/pypi"
 )
 
 func (pv *PythonVersion) UnmarshalText(text []byte) error {
@@ -90,7 +121,7 @@ func (pv *PythonVersion) UnmarshalText(text []byte) error {
 
 	m := regex.FindStringSubmatch(string(text))
 	if len(m) == 0 {
-		return fmt.Errorf(`%s is not of the "3.(\d+)" format`, string(text))
+		return fmt.Errorf(`%s is not of the "3\.(\d+)" format`, string(text))
 	}
 
 	pv.Major = "3"
@@ -105,6 +136,24 @@ func (pv *PythonVersion) String() string {
 
 func (pv *PythonVersion) NumsOnly() string {
 	return pv.Major + pv.Minor
+}
+
+func (nv *NodejsVersion) UnmarshalText(text []byte) error {
+	regex := regexp.MustCompile(`^(\d+)\.(\d+)$`)
+
+	m := regex.FindStringSubmatch(string(text))
+	if len(m) == 0 {
+		return fmt.Errorf(`%s is not of the "(\d+)\.(\d+)" format`, string(text))
+	}
+
+	nv.Major = m[1]
+	nv.Minor = m[2]
+
+	return nil
+}
+
+func (nv *NodejsVersion) String() string {
+	return nv.Major + "." + nv.Minor
 }
 
 func ToModFile(modulePath, goVersion string) WriteHook {
@@ -192,6 +241,10 @@ func GitHubProjectLatestReleaseTag(ctx context.Context, owner, repo string) (tag
 
 func PyPIPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
 	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
+}
+
+func NPMPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s", npmAPIBaseUrl, name), ".dist-tags.latest")
 }
 
 func dashLower(s string) string {
@@ -322,6 +375,11 @@ func (vs *versionSetter) Func(ctx context.Context) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", vs.name, err)
 		}
+	case npm:
+		*vs.indirect, err = NPMPackageLatestVersion(ctx, vs.name)
+		if err != nil {
+			return fmt.Errorf("failed to fetch the latest version of %s from NPM: %w", vs.name, err)
+		}
 	}
 
 	return nil
@@ -437,6 +495,46 @@ func (c *PythonProjectCmd) Run() (err error) {
 	}
 
 	if err = touch(filepath.Join(dir, "py.typed")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *TsCdkProjectCmd) AfterApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	vss := []*versionSetter{
+		{registry: npm, name: "eslint", indirect: &c.EslintVersion},
+		{registry: npm, name: "@eslint/js", indirect: &c.EslintJsVersion},
+		{registry: npm, name: "typescript-eslint", indirect: &c.TypeScriptEslintVersion},
+		{registry: npm, name: "vitest", indirect: &c.VitestVersion},
+		{registry: npm, name: "@vitest/coverage-v8", indirect: &c.VitestCoverageV8Version},
+		{registry: npm, name: "aws-cdk", indirect: &c.AwsCdkCliVersion},
+		{registry: npm, name: "esbuild", indirect: &c.EsbuildVersion},
+		{registry: npm, name: "prettier", indirect: &c.PrettierVersion},
+		{registry: npm, name: "tsx", indirect: &c.TsxVersion},
+		{registry: npm, name: "typescript", indirect: &c.TypeScriptVersion},
+		{registry: npm, name: "@aws-cdk/assert", indirect: &c.AwsCdkAssertVersion},
+		{registry: npm, name: "aws-cdk-lib", indirect: &c.AwsCdkLibVersion},
+		{registry: npm, name: "constructs", indirect: &c.ConstructsVersion},
+		{registry: npm, name: "yaml", indirect: &c.YamlVersion},
+	}
+
+	setterFuncs := getSetterFuncs(vss)
+
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
+
+	defer cancelFunc()
+
+	return setVersions(ctx, setterFuncs)
+}
+
+func (c *TsCdkProjectCmd) Run() (err error) {
+	if err = writeFiles(c.rootDir, tsCdkFS, ".ts.cdk", c); err != nil {
 		return err
 	}
 
