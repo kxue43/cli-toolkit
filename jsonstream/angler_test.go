@@ -1,6 +1,7 @@
 package jsonstream
 
 import (
+	"context"
 	"iter"
 	"math"
 	"strings"
@@ -114,7 +115,7 @@ func TestLand(t *testing.T) {
 			angler, err := NewAngler(strings.NewReader(test.contents), path)
 			require.NoError(t, err)
 
-			value, err := angler.Land()
+			value, err := angler.Land(context.Background())
 			require.NoError(t, err)
 
 			assert.Equal(t, expected, value)

@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -96,11 +97,14 @@ func TestGoProject(t *testing.T) {
 	}()
 
 	cmd := GoProjectCmd{
-		ModulePath: "module-path",
-		GoVersion:  "1.24.5",
+		ModulePath:          "module-path",
+		GoVersion:           "1.24.5",
+		GolangcilintVersion: "LATEST",
+		TartufoVersion:      "LATEST",
+		TimeoutSeconds:      5,
 	}
 
-	err = cmd.BeforeApply()
+	err = cmd.AfterApply()
 	require.NoError(t, err)
 
 	cmd.rootDir = tempDir
@@ -176,7 +180,7 @@ func TestPyPIPackageLatestVersion(t *testing.T) {
 		pypiURL = original
 	}()
 
-	v, err1 := PyPIPackageLatestVersion(pack)
+	v, err1 := PyPIPackageLatestVersion(context.Background(), pack)
 
 	require.NoError(t, err1)
 	assert.Equal(t, version, v)
@@ -214,7 +218,7 @@ func TestGitHubProjectLatestReleaseTag(t *testing.T) {
 		githubAPIBaseURL = original
 	}()
 
-	v, err1 := GitHubProjectLatestReleaseTag(owner, repo)
+	v, err1 := GitHubProjectLatestReleaseTag(context.Background(), owner, repo)
 
 	require.NoError(t, err1)
 	assert.Equal(t, tag, v)
