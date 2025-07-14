@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/cdk.out
+**/package.json
+**/package-lock.json
+**/tsconfig.json
+**/.github
+**/README.md
+**/.git
+**/build

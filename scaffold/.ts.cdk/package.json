@@ -1,0 +1,37 @@
+{
+  "name": "{% .ProjectName %}",
+  "version": "0.1.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kxue43/{% .ProjectName %}"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint",
+    "clean:cdk.out": "rm -rf cdk.out"
+  },
+  "devDependencies": {
+    "eslint": "^{% .EslintVersion %}",
+    "@eslint/js": "^{% .EslintJsVersion %}",
+    "typescript-eslint": "^{% .TypeScriptEslintVersion %}",
+    "@types/node": "^{% .NodejsVersion %}.0",
+    "vitest": "^{% .VitestVersion %}",
+    "@vitest/coverage-v8": "^{% .VitestCoverageV8Version %}",
+    "aws-cdk": "^{% .AwsCdkCliVersion %}",
+    "esbuild": "^{% .EsbuildVersion %}",
+    "prettier": "^{% .PrettierVersion %}",
+    "tsx": "^{% .TsxVersion %}",
+    "typescript": "^{% .TypeScriptVersion %}",
+    "@aws-cdk/assert": "^{% .AwsCdkAssertVersion %}"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^{% .AwsCdkLibVersion %}",
+    "constructs": "^{% .ConstructsVersion %}",
+    "yaml": "^{% .YamlVersion %}"
+  },
+  "license": "UNLICENSED",
+  "publishConfig": {
+    "access": "public"
+  }
+}

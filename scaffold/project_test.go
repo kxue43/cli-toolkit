@@ -224,3 +224,40 @@ func TestGitHubProjectLatestReleaseTag(t *testing.T) {
 	assert.Equal(t, tag, v)
 	assert.Equal(t, fmt.Sprintf("/%s/%s/releases/latest", owner, repo), path)
 }
+
+func TestNPMPackageLatestVersion(t *testing.T) {
+	var path string
+
+	name := "aws-cdk-lib"
+	version := "2.204.0"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+
+		path = r.URL.Path
+
+		contents, err := os.ReadFile(fmt.Sprintf("testdata/npm.%s.resp.json", name))
+		require.NoError(t, err)
+
+		tmplt, err := template.New("response").Parse(string(contents))
+		require.NoError(t, err)
+
+		err = tmplt.Execute(w, version)
+		require.NoError(t, err)
+	}))
+
+	defer ts.Close()
+
+	original := npmAPIBaseUrl
+	npmAPIBaseUrl = ts.URL
+
+	defer func() {
+		npmAPIBaseUrl = original
+	}()
+
+	v, err1 := NPMPackageLatestVersion(context.Background(), name)
+
+	require.NoError(t, err1)
+	assert.Equal(t, version, v)
+	assert.Equal(t, "/"+name, path)
+}
