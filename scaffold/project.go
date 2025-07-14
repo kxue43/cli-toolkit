@@ -111,12 +111,12 @@ func ToModFile(modulePath, goVersion string) WriteHook {
 
 		err := goModFile.AddModuleStmt(modulePath)
 		if err != nil {
-			return fmt.Errorf("failed to format starter go.mod file: %w", err)
+			return fmt.Errorf("failed to add module statement to go.mod file: %w", err)
 		}
 
 		err = goModFile.AddGoStmt(goVersion)
 		if err != nil {
-			return fmt.Errorf("failed to format starter go.mod file: %w", err)
+			return fmt.Errorf("failed to add go statement to go.mod file: %w", err)
 		}
 
 		contents, err := goModFile.Format()
