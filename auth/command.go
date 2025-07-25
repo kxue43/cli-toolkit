@@ -1,3 +1,8 @@
+// Package auth supports performing the AWS CLI credential process. Field tags of the AssumeRoleCmd struct
+// are reserved for working with github.com/alecthomas/kong, but the tags are currently unused so that
+// the toolkit executable works cross-platform. The toolkit-assume-role executable performs the
+// AWS CLI credential process and only works on Linux and macOS because it needs to read from and
+// write to /dev/tty.
 package auth
 
 import (
