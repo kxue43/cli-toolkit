@@ -100,6 +100,11 @@ linters:
           - gosec
         # crypto/sha1 is used for hashing, not encryption. 
         text: "weak cryptographic primitive"
+      - path: '^cmd/toolkit-assume-role/main\.go$'
+        linters:
+          - gosec
+        # variable range is checked before conversion
+        text: "G115: integer overflow conversion int -> int32"
     paths:
       - adhoc/
 
