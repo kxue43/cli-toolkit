@@ -10,7 +10,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17
 	github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools v0.0.0-20250618174058-74ed3a0539dc
 	github.com/goccy/go-yaml v1.18.0
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/stretchr/testify v1.10.0
+	github.com/yuin/goldmark v1.7.13
 	golang.org/x/mod v0.25.0
 )
 
@@ -26,5 +28,6 @@ require (
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
