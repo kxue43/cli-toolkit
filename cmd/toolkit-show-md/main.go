@@ -16,7 +16,7 @@ import (
 var (
 	logger = log.New(os.Stderr, "toolkit-show-md: ", 0)
 
-	//go:embed .github.style.html
+	//go:embed .github.style.tmplt
 	gitHubMarkdownTemplate []byte
 )
 
