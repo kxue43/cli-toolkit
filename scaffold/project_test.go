@@ -43,111 +43,98 @@ type (
 	}
 )
 
-func TestGoProject(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "cli-toolkit")
-	require.NoError(t, err)
+func TestProjects(t *testing.T) {
+	mux := http.NewServeMux()
 
-	defer func() {
+	githubVersion := "v1.2.3"
+	pypiVersion := "4.5.6"
+
+	mux.HandleFunc("GET /{owner}/{repo}/releases/latest", func(w http.ResponseWriter, r *http.Request) {
 		t.Helper()
 
-		err1 := os.RemoveAll(tempDir)
+		body := fmt.Sprintf(`{"tag_name": %q}`, githubVersion)
+
+		_, err1 := w.Write([]byte(body))
 		require.NoError(t, err1)
-	}()
+	})
 
-	tartufoVersion := "v5.0.2"
-	golangciLintVersion := "v2.2.2"
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{name}/json", func(w http.ResponseWriter, r *http.Request) {
 		t.Helper()
 
-		var name, tag string
+		body := fmt.Sprintf(`{"info": {"version": %q}}`, pypiVersion)
 
-		path := r.URL.Path
-
-		if strings.HasSuffix(path, "tartufo/releases/latest") {
-			name = "tartufo"
-			tag = tartufoVersion
-		} else if strings.HasSuffix(path, "golangci-lint/releases/latest") {
-			name = "golangci-lint"
-			tag = golangciLintVersion
-		} else {
-			t.Errorf("received unexpected url path %q", path)
-		}
-
-		contents, err1 := os.ReadFile(fmt.Sprintf("testdata/github.%s.resp.json", name))
+		_, err1 := w.Write([]byte(body))
 		require.NoError(t, err1)
+	})
 
-		tmplt, err1 := template.New("response").Parse(string(contents))
-		require.NoError(t, err1)
-
-		err1 = tmplt.Execute(w, tag)
-		require.NoError(t, err1)
-	}))
+	ts := httptest.NewServer(mux)
 
 	defer ts.Close()
 
-	o1 := pypiURLPrefix
-	o2 := githubAPIURLPrefix
-	pypiURLPrefix = ts.URL
-	githubAPIURLPrefix = ts.URL
-
-	defer func() {
-		pypiURLPrefix = o1
-		githubAPIURLPrefix = o2
-	}()
-
-	cmd := GoProjectCmd{
-		ModulePath:          "module-path",
-		GoVersion:           "1.24.5",
-		GolangcilintVersion: "LATEST",
-		TartufoVersion:      "LATEST",
-		TimeoutSeconds:      5,
-	}
-
-	err = cmd.AfterApply()
-	require.NoError(t, err)
-
-	cmd.rootDir = tempDir
-
-	err = cmd.Run()
-	require.NoError(t, err)
-
-	contents, err := os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github/workflows", "test-and-lint.yaml")))
-	require.NoError(t, err)
-
-	var workflow Workflow
-
-	err = yaml.Unmarshal(contents, &workflow)
-	require.NoError(t, err)
-
-	assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
-	assert.Equal(t, golangciLintVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
-
-	contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
-	require.NoError(t, err)
-
-	var preCommitConfig PreCommitConfig
-
-	err = yaml.Unmarshal(contents, &preCommitConfig)
-	require.NoError(t, err)
-
-	assert.Equal(t, golangciLintVersion, preCommitConfig.Repos[0].Rev)
-	assert.Equal(t, tartufoVersion, preCommitConfig.Repos[1].Rev)
-
-	for _, hook := range preCommitConfig.Repos[0].Hooks {
-		assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
-	}
-
-	files := []string{".golangci.yaml", "Makefile", "tartufo.toml"}
-	for _, name := range files {
-		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
+	t.Run("GoProject", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "cli-toolkit")
 		require.NoError(t, err)
 
-		contents1, err := os.ReadFile(filepath.Clean(filepath.Join(".go", name+tmpltExt)))
+		defer func() { _ = os.RemoveAll(tempDir) }()
+
+		original := githubAPIURLPrefix
+		githubAPIURLPrefix = ts.URL
+
+		defer func() { githubAPIURLPrefix = original }()
+
+		cmd := GoProjectCmd{
+			ModulePath:          "module-path",
+			GoVersion:           "1.24.5",
+			GolangcilintVersion: "LATEST",
+			TartufoVersion:      "LATEST",
+			TimeoutSeconds:      5,
+		}
+
+		err = cmd.AfterApply()
 		require.NoError(t, err)
 
-		assert.Equal(t, contents1, contents)
-	}
+		cmd.rootDir = tempDir
+
+		err = cmd.Run()
+		require.NoError(t, err)
+
+		contents, err := os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github/workflows", "test-and-lint.yaml")))
+		require.NoError(t, err)
+
+		var workflow Workflow
+
+		err = yaml.Unmarshal(contents, &workflow)
+		require.NoError(t, err)
+
+		assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
+		assert.Equal(t, githubVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
+
+		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
+		require.NoError(t, err)
+
+		var preCommitConfig PreCommitConfig
+
+		err = yaml.Unmarshal(contents, &preCommitConfig)
+		require.NoError(t, err)
+
+		assert.Equal(t, githubVersion, preCommitConfig.Repos[0].Rev)
+		assert.Equal(t, githubVersion, preCommitConfig.Repos[1].Rev)
+
+		for _, hook := range preCommitConfig.Repos[0].Hooks {
+			assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
+		}
+
+		files := []string{".golangci.yaml", "Makefile", "tartufo.toml"}
+		for _, name := range files {
+			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
+			require.NoError(t, err)
+
+			contents1, err := os.ReadFile(filepath.Clean(filepath.Join(".go", name+tmpltExt)))
+			require.NoError(t, err)
+
+			assert.Equal(t, contents1, contents)
+		}
+	})
 }
 
 func TestGetVersions(t *testing.T) {
