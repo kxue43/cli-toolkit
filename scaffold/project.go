@@ -114,6 +114,8 @@ var (
 	npmAPIBaseUrl = "https://registry.npmjs.org"
 
 	pypiURL = "https://pypi.org/pypi"
+
+	tmpltExt = ".tmplt"
 )
 
 func (pv *PythonVersion) UnmarshalText(text []byte) error {
@@ -307,15 +309,15 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 		srcDirs = srcDirs[1:]
 	}
 
-	var wg sync.WaitGroup
-
-	semaphore := make(chan struct{}, 7)
-	out := make(chan error)
-
 	tmplt, err := template.New("entry").Delims("{%", "%}").Funcs(template.FuncMap{"DashLower": dashLower}).ParseFS(srcFS, srcFiles...)
 	if err != nil {
 		return fmt.Errorf("failed to parse data files as templates: %w", err)
 	}
+
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 7)
+	out := make(chan error)
 
 	for _, srcFile := range srcFiles {
 		wg.Add(1)
@@ -326,14 +328,14 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			destFile, err1 := filepath.Rel(srcPrefix, srcFile)
+			destItem, err1 := filepath.Rel(srcPrefix, srcFile)
 			if err1 != nil {
 				out <- fmt.Errorf("name of the data file %q does not start with prefix %q: %w", srcFile, srcPrefix, err1)
 
 				return
 			}
 
-			err1 = WriteToFile(dest, destFile, func(fd io.Writer) error {
+			err1 = WriteToFile(dest, strings.TrimSuffix(destItem, tmpltExt), func(fd io.Writer) error {
 				return tmplt.ExecuteTemplate(fd, filepath.Base(srcFile), data)
 			})
 			if err1 != nil {
@@ -341,8 +343,6 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 
 				return
 			}
-
-			out <- nil
 		}()
 	}
 
@@ -355,9 +355,7 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	var errs []error
 
 	for err = range out {
-		if err != nil {
-			errs = append(errs, err)
-		}
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)
