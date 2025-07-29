@@ -3,7 +3,7 @@ repos:
     rev: "{% .BlackVersion %}"
     hooks:
       - id: black
-        language_version: python3.12
+        language_version: python{% .PythonVersion %}
 
   - repo: https://github.com/PyCQA/flake8
     rev: "{% .Flake8Version %}"
