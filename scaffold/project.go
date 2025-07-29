@@ -46,7 +46,8 @@ type (
 		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
-		TimeoutSeconds    int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss               []*versionSetter
+		TimeoutSeconds    int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	TsCdkProjectCmd struct {
@@ -456,13 +457,8 @@ func (c *GoProjectCmd) Run() (err error) {
 	return nil
 }
 
-func (c *PythonProjectCmd) AfterApply() (err error) {
-	c.rootDir, err = os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	vss := []*versionSetter{
+func (c *PythonProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
 		{registry: github, scope: "psf", name: "black", indirect: &c.BlackVersion},
 		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
 		{registry: pypi, name: "flake8", indirect: &c.Flake8Version},
@@ -474,7 +470,16 @@ func (c *PythonProjectCmd) AfterApply() (err error) {
 		{registry: pypi, name: "Sphinx", indirect: &c.SphinxVersion},
 	}
 
-	setterFuncs := getSetterFuncs(vss)
+	return nil
+}
+
+func (c *PythonProjectCmd) AfterApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
