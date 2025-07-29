@@ -20,19 +20,15 @@ import (
 )
 
 type (
-	Step struct {
-		With map[string]string `yaml:"with"`
-		Name string            `yaml:"name"`
-		Uses string            `yaml:"uses"`
-	}
-
-	Job struct {
-		RunsOn string `yaml:"runs-on"`
-		Steps  []Step
-	}
-
 	Workflow struct {
-		Jobs map[string]Job `yaml:"jobs"`
+		Jobs map[string]struct {
+			RunsOn string `yaml:"runs-on"`
+			Steps  []struct {
+				With map[string]string `yaml:"with"`
+				Name string            `yaml:"name"`
+				Uses string            `yaml:"uses"`
+			}
+		} `yaml:"jobs"`
 	}
 
 	PreCommitConfig struct {
@@ -197,6 +193,13 @@ func TestProjects(t *testing.T) {
 			pypiURLPrefix = o2
 		}()
 
+		pythonVersion := PythonVersion{}
+		err = pythonVersion.UnmarshalText([]byte("3.12"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "3", pythonVersion.Major)
+		assert.Equal(t, "12", pythonVersion.Minor)
+
 		cmd := PythonProjectCmd{
 			ProjectName:       "fs-walk",
 			Description:       "description",
@@ -209,7 +212,7 @@ func TestProjects(t *testing.T) {
 			PytestMockVersion: "LATEST",
 			PytestCovVersion:  "LATEST",
 			SphinxVersion:     "LATEST",
-			PythonVersion:     PythonVersion{Major: "3", Minor: "12"},
+			PythonVersion:     pythonVersion,
 			TimeoutSeconds:    5,
 		}
 
@@ -348,6 +351,14 @@ func TestProjects(t *testing.T) {
 
 		defer func() { npmAPIBURLPrefix = original }()
 
+		nodejsVersion := NodejsVersion{}
+		err = nodejsVersion.UnmarshalText([]byte("20.19"))
+
+		require.NoError(t, err)
+
+		assert.Equal(t, "20", nodejsVersion.Major)
+		assert.Equal(t, "19", nodejsVersion.Minor)
+
 		cmd := TsCdkProjectCmd{
 			ProjectName:             "adhoc",
 			EslintVersion:           "LATEST",
@@ -364,7 +375,7 @@ func TestProjects(t *testing.T) {
 			AwsCdkLibVersion:        "LATEST",
 			ConstructsVersion:       "LATEST",
 			YamlVersion:             "LATEST",
-			NodejsVersion:           NodejsVersion{Major: "20", Minor: "19"},
+			NodejsVersion:           nodejsVersion,
 			TimeoutSeconds:          5,
 		}
 
@@ -424,6 +435,8 @@ func TestProjects(t *testing.T) {
 				assert.Equal(t, "^"+npmVersion, packageJson.Dependencies[vs.name])
 			}
 		}
+
+		assert.Equal(t, fmt.Sprintf("^%s.0", cmd.NodejsVersion.String()), packageJson.DevDependencies["@types/node"])
 	})
 }
 
