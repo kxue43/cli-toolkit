@@ -3,7 +3,8 @@ dist/**/*
 /data
 .DS_Store
 /toolkit
-/mdmak
 /coverage.out
 /temp*.json
 /temp*.yaml
+/toolkit
+/toolkit-*

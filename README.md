@@ -20,3 +20,6 @@ go install github.com/kxue43/cli-toolkit/cmd/toolkit-assume-role@latest
 `toolkit-show-md` takes a Markdown file, converts it to a GitHub style HTML and
 displays the HTML in user's default browser. It's used by
 [kxue43/showmd-vim-plugin](https://github.com/kxue43/showmd-vim-plugin).
+
+`toolkit-serve-static` provides a local server of static websites. It can be used together with
+[air-verse/air](https://github.com/air-verse/air) to add live-reload capability to the server.
