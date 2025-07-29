@@ -28,7 +28,8 @@ type (
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
 		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
 		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
-		TimeoutSeconds      int    `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss                 []*versionSetter
+		TimeoutSeconds      int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
@@ -419,18 +420,22 @@ func setVersions(ctx context.Context, fns []setterFunc) error {
 	return errors.Join(errs...)
 }
 
+func (c *GoProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
+		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
+		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
+	}
+
+	return nil
+}
+
 func (c *GoProjectCmd) AfterApply() (err error) {
 	c.rootDir, err = os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	vss := []*versionSetter{
-		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
-		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
-	}
-
-	setterFuncs := getSetterFuncs(vss)
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 

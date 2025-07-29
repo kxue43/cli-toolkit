@@ -8,9 +8,9 @@ import (
 
 func main() {
 	var cli struct {
-		StartGoProject     scaffold.GoProjectCmd     `cmd:"" name:"start-go-project" help:"Start a Go project in the current directory."`
-		StartPythonProject scaffold.PythonProjectCmd `cmd:"" name:"start-python-project" help:"Start a Python project in the current directory."`
 		StartTsCdkProject  scaffold.TsCdkProjectCmd  `cmd:"" name:"start-ts-cdk-project" help:"Start a TypeScript CDK project in the current directory."`
+		StartPythonProject scaffold.PythonProjectCmd `cmd:"" name:"start-python-project" help:"Start a Python project in the current directory."`
+		StartGoProject     scaffold.GoProjectCmd     `cmd:"" name:"start-go-project" help:"Start a Go project in the current directory."`
 	}
 
 	ctx := kong.Parse(

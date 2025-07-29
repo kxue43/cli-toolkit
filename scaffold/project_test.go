@@ -90,6 +90,9 @@ func TestProjects(t *testing.T) {
 			TimeoutSeconds:      5,
 		}
 
+		err = cmd.BeforeReset()
+		require.NoError(t, err)
+
 		err = cmd.AfterApply()
 		require.NoError(t, err)
 
