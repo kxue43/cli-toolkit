@@ -18,7 +18,7 @@ import (
 var (
 	logger = log.New(os.Stderr, "toolkit-show-md: ", 0)
 
-	helpMsg = `Usage: %s  <PATH>
+	helpMsg = `Usage: %s <PATH>
 
 Convert Markdown file to GitHub style HTML and display HTML in the default browser.
 
@@ -42,7 +42,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		flag.Usage()
+		logger.Fatalln("Exactly one argument is permitted and it is <PATH>.")
 	}
 
 	inpath := filepath.Clean(args[0])

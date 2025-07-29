@@ -108,7 +108,7 @@ linters:
       - path: '^cmd/toolkit-serve-static/main\.go$'
         linters:
           - gosec
-        # local static files server doesn't see timeout
+        # local static files server doesn't need timeout
         text: "G114: Use of net/http serve function that has no support for setting timeouts"
     paths:
       - adhoc/
