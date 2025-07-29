@@ -100,13 +100,13 @@ const (
 )
 
 var (
-	//go:embed ".go/*"
+	//go:embed "all:.go/*"
 	goFS embed.FS
 
-	//go:embed ".ts.cdk/*"
+	//go:embed "all:.ts.cdk/*"
 	tsCdkFS embed.FS
 
-	//go:embed ".python/*"
+	//go:embed "all:.python/*"
 	pythonFS embed.FS
 
 	githubAPIURLPrefix = "https://api.github.com/repos"
