@@ -68,7 +68,8 @@ type (
 		ConstructsVersion       string        `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
 		YamlVersion             string        `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
 		NodejsVersion           NodejsVersion `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
-		TimeoutSeconds          int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss                     []*versionSetter
+		TimeoutSeconds          int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	WriteHook func(io.Writer) error
@@ -509,13 +510,8 @@ func (c *PythonProjectCmd) Run() (err error) {
 	return nil
 }
 
-func (c *TsCdkProjectCmd) AfterApply() (err error) {
-	c.rootDir, err = os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	vss := []*versionSetter{
+func (c *TsCdkProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
 		{registry: npm, name: "eslint", indirect: &c.EslintVersion},
 		{registry: npm, name: "@eslint/js", indirect: &c.EslintJsVersion},
 		{registry: npm, name: "typescript-eslint", indirect: &c.TypeScriptEslintVersion},
@@ -532,7 +528,16 @@ func (c *TsCdkProjectCmd) AfterApply() (err error) {
 		{registry: npm, name: "yaml", indirect: &c.YamlVersion},
 	}
 
-	setterFuncs := getSetterFuncs(vss)
+	return nil
+}
+
+func (c *TsCdkProjectCmd) AfterApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 

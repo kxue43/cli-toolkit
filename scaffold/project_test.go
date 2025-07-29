@@ -3,6 +3,7 @@ package scaffold
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -69,38 +70,51 @@ type (
 			} `toml:"black"`
 		} `toml:"tool"`
 	}
+
+	PackageJson struct {
+		DevDependencies map[string]string `json:"devDependencies"`
+		Dependencies    map[string]string `json:"dependencies"`
+		Name            string            `json:"name"`
+		Repository      struct {
+			Url string `json:"url"`
+		} `json:"repository"`
+	}
 )
 
 func TestProjects(t *testing.T) {
+	handlerFactory := func(tmplt, version string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Helper()
+
+			body := fmt.Sprintf(tmplt, version)
+
+			_, err := w.Write([]byte(body))
+			require.NoError(t, err)
+		})
+	}
+
 	mux := http.NewServeMux()
 
 	githubVersion := "v1.2.3"
 	pypiVersion := "4.5.6"
+	npmVersion := "7.8.9"
 
-	mux.HandleFunc("GET /{owner}/{repo}/releases/latest", func(w http.ResponseWriter, r *http.Request) {
-		t.Helper()
+	mux.Handle("GET /{owner}/{repo}/releases/latest", handlerFactory(`{"tag_name": %q}`, githubVersion))
+	mux.Handle("GET /{name}/json", handlerFactory(`{"info": {"version": %q}}`, pypiVersion))
 
-		body := fmt.Sprintf(`{"tag_name": %q}`, githubVersion)
+	npmHandler := handlerFactory(`{"dist-tags": {"latest": %q}}`, npmVersion)
 
-		_, err1 := w.Write([]byte(body))
-		require.NoError(t, err1)
-	})
-
-	mux.HandleFunc("GET /{name}/json", func(w http.ResponseWriter, r *http.Request) {
-		t.Helper()
-
-		body := fmt.Sprintf(`{"info": {"version": %q}}`, pypiVersion)
-
-		_, err1 := w.Write([]byte(body))
-		require.NoError(t, err1)
-	})
+	mux.Handle("GET /{name}", npmHandler)
+	mux.Handle("GET /@eslint/js", npmHandler)
+	mux.Handle("GET /@vitest/coverage-v8", npmHandler)
+	mux.Handle("GET /@aws-cdk/assert", npmHandler)
 
 	ts := httptest.NewServer(mux)
 
 	defer ts.Close()
 
 	t.Run("GoProject", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "cli-toolkit")
+		tempDir, err := os.MkdirTemp("", "go")
 		require.NoError(t, err)
 
 		defer func() { _ = os.RemoveAll(tempDir) }()
@@ -168,7 +182,7 @@ func TestProjects(t *testing.T) {
 	})
 
 	t.Run("PythonProject", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "cli-toolkit")
+		tempDir, err := os.MkdirTemp("", "python")
 		require.NoError(t, err)
 
 		defer func() { _ = os.RemoveAll(tempDir) }()
@@ -321,6 +335,95 @@ func TestProjects(t *testing.T) {
 		}
 
 		assert.Equal(t, fmt.Sprintf(`    result = f"https://github.com/kxue43/%s/blob/main/{filename}.py{anchor}"`, cmd.ProjectName), scanner.Text())
+	})
+
+	t.Run("TsCdkProject", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "ts-cdk")
+		require.NoError(t, err)
+
+		defer func() { _ = os.RemoveAll(tempDir) }()
+
+		original := npmAPIBURLPrefix
+		npmAPIBURLPrefix = ts.URL
+
+		defer func() { npmAPIBURLPrefix = original }()
+
+		cmd := TsCdkProjectCmd{
+			ProjectName:             "adhoc",
+			EslintVersion:           "LATEST",
+			EslintJsVersion:         "LATEST",
+			TypeScriptEslintVersion: "LATEST",
+			VitestVersion:           "LATEST",
+			VitestCoverageV8Version: "LATEST",
+			AwsCdkCliVersion:        "LATEST",
+			EsbuildVersion:          "LATEST",
+			PrettierVersion:         "LATEST",
+			TsxVersion:              "LATEST",
+			TypeScriptVersion:       "LATEST",
+			AwsCdkAssertVersion:     "LATEST",
+			AwsCdkLibVersion:        "LATEST",
+			ConstructsVersion:       "LATEST",
+			YamlVersion:             "LATEST",
+			NodejsVersion:           NodejsVersion{Major: "20", Minor: "19"},
+			TimeoutSeconds:          5,
+		}
+
+		err = cmd.BeforeReset()
+		require.NoError(t, err)
+
+		err = cmd.AfterApply()
+		require.NoError(t, err)
+
+		cmd.rootDir = tempDir
+
+		err = cmd.Run()
+		require.NoError(t, err)
+
+		var contents, contents1 []byte
+
+		constantFiles := []string{
+			".gitattributes",
+			".gitignore",
+			".npmignore",
+			".prettierignore",
+			".prettierrc.json",
+			"cdk.json",
+			"eslint.config.js",
+			"tsconfig.json",
+			"vitest.config.ts",
+			"src/main.ts",
+			"test/setUp.ts",
+			"test/utils.ts",
+			"test/vitest.d.ts",
+		}
+		for _, name := range constantFiles {
+			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
+			require.NoError(t, err)
+
+			contents1, err = os.ReadFile(filepath.Clean(filepath.Join(".ts.cdk", name+tmpltExt)))
+			require.NoError(t, err)
+
+			assert.Equal(t, contents1, contents)
+		}
+
+		var packageJson PackageJson
+
+		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, "package.json")))
+		require.NoError(t, err)
+
+		err = json.Unmarshal(contents, &packageJson)
+		require.NoError(t, err)
+
+		assert.Equal(t, cmd.ProjectName, packageJson.Name)
+		assert.Equal(t, fmt.Sprintf("https://github.com/kxue43/%s", cmd.ProjectName), packageJson.Repository.Url)
+
+		for _, vs := range cmd.vss {
+			if version, ok := packageJson.DevDependencies[vs.name]; ok {
+				assert.Equal(t, "^"+npmVersion, version)
+			} else {
+				assert.Equal(t, "^"+npmVersion, packageJson.Dependencies[vs.name])
+			}
+		}
 	})
 }
 
