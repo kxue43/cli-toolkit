@@ -1,0 +1,33 @@
+## Live Reload Server
+
+You can use a local live-reload server to read your rendered documents while you are writing them.
+
+The live-reload server relies on two executable Go programs. To use them, first install Go and then run the following
+two commands.
+
+```bash
+go install github.com/kxue43/cli-toolkit/cmd/toolkit-serve-static@latest
+go install github.com/air-verse/air@latest
+```
+
+The executables are installed at `GOBIN`, which by default is `GOPATH/bin`. Make sure the installation folder is on
+your `PATH`. You can use the following commands to query the Go environment information.
+
+```bash
+go env GOBIN
+go env GOPATH
+```
+
+To start the server, run the following command from the folder than contains the `.air.toml` file.
+Then, in your browser, go to `localhost:8080`.
+
+```bash
+air
+```
+
+Note that by default the live-reload server only watches generated static files in the `_build/html` folder,
+not your source `.rst` files. When you want to view the changes,
+you need to run `make html` to regenerate static files first.
+It is possible to update configurations in `.air.toml` so that the server reloads on `.rst` changes.
+Please consult the [air-verse/air](https://github.com/air-verse/air/blob/master/air_example.toml)
+documentation on how to do that.
