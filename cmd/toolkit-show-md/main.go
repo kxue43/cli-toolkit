@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,6 +18,13 @@ import (
 var (
 	logger = log.New(os.Stderr, "toolkit-show-md: ", 0)
 
+	helpMsg = `Usage: %s  <PATH>
+
+Convert Markdown file to GitHub style HTML and display HTML in the default browser.
+
+Arguments:
+  <PATH>    Path to the Markdown file to convert.
+`
 	//go:embed .github.style.tmplt
 	gitHubMarkdownTemplate []byte
 )
@@ -25,11 +34,18 @@ func main() {
 
 	var err error
 
-	if len(os.Args) != 2 {
-		logger.Fatalf("Usage: toolkit-show-md <INPATH>.")
+	flag.Usage = func() {
+		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
 	}
 
-	inpath := filepath.Clean(os.Args[1])
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) != 1 {
+		flag.Usage()
+	}
+
+	inpath := filepath.Clean(args[0])
 
 	if stat, err = os.Stat(inpath); os.IsNotExist(err) || stat.IsDir() {
 		logger.Fatalf("The input path %q doesn't exist or is a directory.", inpath)
