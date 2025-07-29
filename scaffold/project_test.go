@@ -86,14 +86,14 @@ func TestGoProject(t *testing.T) {
 
 	defer ts.Close()
 
-	o1 := pypiURL
-	o2 := githubAPIBaseURL
-	pypiURL = ts.URL
-	githubAPIBaseURL = ts.URL
+	o1 := pypiURLPrefix
+	o2 := githubAPIURLPrefix
+	pypiURLPrefix = ts.URL
+	githubAPIURLPrefix = ts.URL
 
 	defer func() {
-		pypiURL = o1
-		githubAPIBaseURL = o2
+		pypiURLPrefix = o1
+		githubAPIURLPrefix = o2
 	}()
 
 	cmd := GoProjectCmd{
@@ -150,114 +150,75 @@ func TestGoProject(t *testing.T) {
 	}
 }
 
-func TestPyPIPackageLatestVersion(t *testing.T) {
-	var path string
+func TestGetVersions(t *testing.T) {
+	handlerFactory := func(registry, name, version string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			t.Helper()
 
-	pack := "black"
-	version := "25.1.0"
+			contents, err := os.ReadFile(fmt.Sprintf("testdata/%s.%s.resp.json", registry, name))
+			require.NoError(t, err)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Helper()
+			tmplt, err := template.New("response").Parse(string(contents))
+			require.NoError(t, err)
 
-		path = r.URL.Path
+			err = tmplt.Execute(w, version)
+			require.NoError(t, err)
+		})
+	}
 
-		contents, err := os.ReadFile(fmt.Sprintf("testdata/pypi.%s.resp.json", pack))
-		require.NoError(t, err)
+	blackVersion := "25.1.0"
+	golangciLintVersion := "v2.2.2"
+	awsCdkLibVersion := "2.204.0"
 
-		tmplt, err := template.New("response").Parse(string(contents))
-		require.NoError(t, err)
+	mux := http.NewServeMux()
 
-		err = tmplt.Execute(w, version)
-		require.NoError(t, err)
-	}))
+	mux.Handle("GET /black/json", handlerFactory("pypi", "black", blackVersion))
+	mux.Handle("GET /golangci/golangci-lint/releases/latest", handlerFactory("github", "golangci-lint", golangciLintVersion))
+	mux.Handle("GET /aws-cdk-lib", handlerFactory("npm", "aws-cdk-lib", awsCdkLibVersion))
 
-	defer ts.Close()
-
-	original := pypiURL
-	pypiURL = ts.URL
-
-	defer func() {
-		pypiURL = original
-	}()
-
-	v, err1 := PyPIPackageLatestVersion(context.Background(), pack)
-
-	require.NoError(t, err1)
-	assert.Equal(t, version, v)
-	assert.Equal(t, fmt.Sprintf("/%s/json", pack), path)
-}
-
-func TestGitHubProjectLatestReleaseTag(t *testing.T) {
-	var path string
-
-	owner := "golangci"
-	repo := "golangci-lint"
-	tag := "v2.2.2"
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Helper()
-
-		path = r.URL.Path
-
-		contents, err := os.ReadFile(fmt.Sprintf("testdata/github.%s.resp.json", repo))
-		require.NoError(t, err)
-
-		tmplt, err := template.New("response").Parse(string(contents))
-		require.NoError(t, err)
-
-		err = tmplt.Execute(w, tag)
-		require.NoError(t, err)
-	}))
+	ts := httptest.NewServer(mux)
 
 	defer ts.Close()
 
-	original := githubAPIBaseURL
-	githubAPIBaseURL = ts.URL
+	t.Run("PyPIPackageLatestVersion", func(t *testing.T) {
+		original := pypiURLPrefix
+		pypiURLPrefix = ts.URL
 
-	defer func() {
-		githubAPIBaseURL = original
-	}()
+		defer func() {
+			pypiURLPrefix = original
+		}()
 
-	v, err1 := GitHubProjectLatestReleaseTag(context.Background(), owner, repo)
+		v, err1 := PyPIPackageLatestVersion(context.Background(), "black")
 
-	require.NoError(t, err1)
-	assert.Equal(t, tag, v)
-	assert.Equal(t, fmt.Sprintf("/%s/%s/releases/latest", owner, repo), path)
-}
+		require.NoError(t, err1)
+		assert.Equal(t, blackVersion, v)
+	})
 
-func TestNPMPackageLatestVersion(t *testing.T) {
-	var path string
+	t.Run("GitHubProjectLatestReleaseTag", func(t *testing.T) {
+		original := githubAPIURLPrefix
+		githubAPIURLPrefix = ts.URL
 
-	name := "aws-cdk-lib"
-	version := "2.204.0"
+		defer func() {
+			githubAPIURLPrefix = original
+		}()
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Helper()
+		v, err1 := GitHubProjectLatestReleaseTag(context.Background(), "golangci", "golangci-lint")
 
-		path = r.URL.Path
+		require.NoError(t, err1)
+		assert.Equal(t, golangciLintVersion, v)
+	})
 
-		contents, err := os.ReadFile(fmt.Sprintf("testdata/npm.%s.resp.json", name))
-		require.NoError(t, err)
+	t.Run("NPMPackageLatestVersion", func(t *testing.T) {
+		original := npmAPIBURLPrefix
+		npmAPIBURLPrefix = ts.URL
 
-		tmplt, err := template.New("response").Parse(string(contents))
-		require.NoError(t, err)
+		defer func() {
+			npmAPIBURLPrefix = original
+		}()
 
-		err = tmplt.Execute(w, version)
-		require.NoError(t, err)
-	}))
+		v, err1 := NPMPackageLatestVersion(context.Background(), "aws-cdk-lib")
 
-	defer ts.Close()
-
-	original := npmAPIBaseUrl
-	npmAPIBaseUrl = ts.URL
-
-	defer func() {
-		npmAPIBaseUrl = original
-	}()
-
-	v, err1 := NPMPackageLatestVersion(context.Background(), name)
-
-	require.NoError(t, err1)
-	assert.Equal(t, version, v)
-	assert.Equal(t, "/"+name, path)
+		require.NoError(t, err1)
+		assert.Equal(t, awsCdkLibVersion, v)
+	})
 }

@@ -109,11 +109,11 @@ var (
 	//go:embed ".python/*"
 	pythonFS embed.FS
 
-	githubAPIBaseURL = "https://api.github.com/repos"
+	githubAPIURLPrefix = "https://api.github.com/repos"
 
-	npmAPIBaseUrl = "https://registry.npmjs.org"
+	npmAPIBURLPrefix = "https://registry.npmjs.org"
 
-	pypiURL = "https://pypi.org/pypi"
+	pypiURLPrefix = "https://pypi.org/pypi"
 
 	tmpltExt = ".tmplt"
 )
@@ -238,15 +238,15 @@ func landFromPublicEndpoint(ctx context.Context, url, path string) (value string
 }
 
 func GitHubProjectLatestReleaseTag(ctx context.Context, owner, repo string) (tag string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIBaseURL, owner, repo), ".tag_name")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIURLPrefix, owner, repo), ".tag_name")
 }
 
 func PyPIPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURLPrefix, name), ".info.version")
 }
 
 func NPMPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s", npmAPIBaseUrl, name), ".dist-tags.latest")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s", npmAPIBURLPrefix, name), ".dist-tags.latest")
 }
 
 func dashLower(s string) string {
