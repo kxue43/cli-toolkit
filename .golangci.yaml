@@ -105,6 +105,11 @@ linters:
           - gosec
         # variable range is checked before conversion
         text: "G115: integer overflow conversion int -> int32"
+      - path: '^cmd/toolkit-serve-static/main\.go$'
+        linters:
+          - gosec
+        # local static files server doesn't need timeout
+        text: "G114: Use of net/http serve function that has no support for setting timeouts"
     paths:
       - adhoc/
 

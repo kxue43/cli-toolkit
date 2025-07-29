@@ -28,7 +28,8 @@ type (
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
 		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
 		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
-		TimeoutSeconds      int    `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss                 []*versionSetter
+		TimeoutSeconds      int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
@@ -45,7 +46,8 @@ type (
 		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
-		TimeoutSeconds    int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss               []*versionSetter
+		TimeoutSeconds    int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	TsCdkProjectCmd struct {
@@ -66,7 +68,8 @@ type (
 		ConstructsVersion       string        `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
 		YamlVersion             string        `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
 		NodejsVersion           NodejsVersion `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
-		TimeoutSeconds          int           `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		vss                     []*versionSetter
+		TimeoutSeconds          int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	WriteHook func(io.Writer) error
@@ -100,20 +103,22 @@ const (
 )
 
 var (
-	//go:embed ".go/*"
+	//go:embed "all:.go/*"
 	goFS embed.FS
 
-	//go:embed ".ts.cdk/*"
+	//go:embed "all:.ts.cdk/*"
 	tsCdkFS embed.FS
 
-	//go:embed ".python/*"
+	//go:embed "all:.python/*"
 	pythonFS embed.FS
 
-	githubAPIBaseURL = "https://api.github.com/repos"
+	githubAPIURLPrefix = "https://api.github.com/repos"
 
-	npmAPIBaseUrl = "https://registry.npmjs.org"
+	npmAPIBURLPrefix = "https://registry.npmjs.org"
 
-	pypiURL = "https://pypi.org/pypi"
+	pypiURLPrefix = "https://pypi.org/pypi"
+
+	tmpltExt = ".tmplt"
 )
 
 func (pv *PythonVersion) UnmarshalText(text []byte) error {
@@ -236,15 +241,15 @@ func landFromPublicEndpoint(ctx context.Context, url, path string) (value string
 }
 
 func GitHubProjectLatestReleaseTag(ctx context.Context, owner, repo string) (tag string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIBaseURL, owner, repo), ".tag_name")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/%s/releases/latest", githubAPIURLPrefix, owner, repo), ".tag_name")
 }
 
 func PyPIPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURL, name), ".info.version")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s/json", pypiURLPrefix, name), ".info.version")
 }
 
 func NPMPackageLatestVersion(ctx context.Context, name string) (version string, err error) {
-	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s", npmAPIBaseUrl, name), ".dist-tags.latest")
+	return landFromPublicEndpoint(ctx, fmt.Sprintf("%s/%s", npmAPIBURLPrefix, name), ".dist-tags.latest")
 }
 
 func dashLower(s string) string {
@@ -307,15 +312,15 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 		srcDirs = srcDirs[1:]
 	}
 
-	var wg sync.WaitGroup
-
-	semaphore := make(chan struct{}, 7)
-	out := make(chan error)
-
 	tmplt, err := template.New("entry").Delims("{%", "%}").Funcs(template.FuncMap{"DashLower": dashLower}).ParseFS(srcFS, srcFiles...)
 	if err != nil {
 		return fmt.Errorf("failed to parse data files as templates: %w", err)
 	}
+
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 7)
+	out := make(chan error)
 
 	for _, srcFile := range srcFiles {
 		wg.Add(1)
@@ -326,14 +331,14 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			destFile, err1 := filepath.Rel(srcPrefix, srcFile)
+			destItem, err1 := filepath.Rel(srcPrefix, srcFile)
 			if err1 != nil {
 				out <- fmt.Errorf("name of the data file %q does not start with prefix %q: %w", srcFile, srcPrefix, err1)
 
 				return
 			}
 
-			err1 = WriteToFile(dest, destFile, func(fd io.Writer) error {
+			err1 = WriteToFile(dest, strings.TrimSuffix(destItem, tmpltExt), func(fd io.Writer) error {
 				return tmplt.ExecuteTemplate(fd, filepath.Base(srcFile), data)
 			})
 			if err1 != nil {
@@ -341,8 +346,6 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 
 				return
 			}
-
-			out <- nil
 		}()
 	}
 
@@ -355,9 +358,7 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	var errs []error
 
 	for err = range out {
-		if err != nil {
-			errs = append(errs, err)
-		}
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)
@@ -421,18 +422,22 @@ func setVersions(ctx context.Context, fns []setterFunc) error {
 	return errors.Join(errs...)
 }
 
+func (c *GoProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
+		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
+		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
+	}
+
+	return nil
+}
+
 func (c *GoProjectCmd) AfterApply() (err error) {
 	c.rootDir, err = os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	vss := []*versionSetter{
-		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
-		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
-	}
-
-	setterFuncs := getSetterFuncs(vss)
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
@@ -453,13 +458,8 @@ func (c *GoProjectCmd) Run() (err error) {
 	return nil
 }
 
-func (c *PythonProjectCmd) AfterApply() (err error) {
-	c.rootDir, err = os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	vss := []*versionSetter{
+func (c *PythonProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
 		{registry: github, scope: "psf", name: "black", indirect: &c.BlackVersion},
 		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
 		{registry: pypi, name: "flake8", indirect: &c.Flake8Version},
@@ -471,7 +471,16 @@ func (c *PythonProjectCmd) AfterApply() (err error) {
 		{registry: pypi, name: "Sphinx", indirect: &c.SphinxVersion},
 	}
 
-	setterFuncs := getSetterFuncs(vss)
+	return nil
+}
+
+func (c *PythonProjectCmd) AfterApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
@@ -501,13 +510,8 @@ func (c *PythonProjectCmd) Run() (err error) {
 	return nil
 }
 
-func (c *TsCdkProjectCmd) AfterApply() (err error) {
-	c.rootDir, err = os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	vss := []*versionSetter{
+func (c *TsCdkProjectCmd) BeforeReset() error {
+	c.vss = []*versionSetter{
 		{registry: npm, name: "eslint", indirect: &c.EslintVersion},
 		{registry: npm, name: "@eslint/js", indirect: &c.EslintJsVersion},
 		{registry: npm, name: "typescript-eslint", indirect: &c.TypeScriptEslintVersion},
@@ -524,7 +528,16 @@ func (c *TsCdkProjectCmd) AfterApply() (err error) {
 		{registry: npm, name: "yaml", indirect: &c.YamlVersion},
 	}
 
-	setterFuncs := getSetterFuncs(vss)
+	return nil
+}
+
+func (c *TsCdkProjectCmd) AfterApply() (err error) {
+	c.rootDir, err = os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	setterFuncs := getSetterFuncs(c.vss)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 

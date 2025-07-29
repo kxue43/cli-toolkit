@@ -1,0 +1,34 @@
+root = "."
+tmp_dir = ".tmp"
+
+[build]
+  cmd = 'echo "starting static files server..."'
+  args_bin = ["-port", "8090", "_build/html"]
+  bin = "toolkit-serve-static"
+  include_dir = ["_build/html"]
+  include_ext = ["html", "css", "js", "txt"]
+  log = "build-errors.log"
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  silent = false
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[proxy]
+  app_port = 8090
+  enabled = true
+  proxy_port = 8080
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true
