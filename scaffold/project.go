@@ -28,7 +28,7 @@ type (
 		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
 		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
 		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
-		vss                 []*versionSetter
+		VersionSetters      []VersionSetter
 		TimeoutSeconds      int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
@@ -46,7 +46,7 @@ type (
 		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
 		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
-		vss               []*versionSetter
+		VersionSetters    []VersionSetter
 		TimeoutSeconds    int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
@@ -68,7 +68,7 @@ type (
 		ConstructsVersion       string        `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
 		YamlVersion             string        `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
 		NodejsVersion           NodejsVersion `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
-		vss                     []*versionSetter
+		VersionSetters          []VersionSetter
 		TimeoutSeconds          int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
@@ -84,22 +84,22 @@ type (
 		Minor string
 	}
 
-	registry int
+	Registry byte
 
-	versionSetter struct {
-		indirect *string
-		scope    string
-		name     string
-		registry registry
+	VersionSetter struct {
+		Indirect *string
+		Scope    string
+		Name     string
+		Registry Registry
 	}
 
 	setterFunc func(context.Context) error
 )
 
 const (
-	github registry = iota
-	pypi
-	npm
+	GitHub Registry = iota
+	PyPI
+	NPM
 )
 
 var (
@@ -364,34 +364,34 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 	return errors.Join(errs...)
 }
 
-func (vs *versionSetter) Func(ctx context.Context) (err error) {
-	switch vs.registry {
-	case github:
-		*vs.indirect, err = GitHubProjectLatestReleaseTag(ctx, vs.scope, vs.name)
+func (vs VersionSetter) Func(ctx context.Context) (err error) {
+	switch vs.Registry {
+	case GitHub:
+		*vs.Indirect, err = GitHubProjectLatestReleaseTag(ctx, vs.Scope, vs.Name)
 		if err != nil {
-			return fmt.Errorf("failed to fetch the latest version of %s/%s from GitHub: %w", vs.scope, vs.name, err)
+			return fmt.Errorf("failed to fetch the latest version of %s/%s from GitHub: %w", vs.Scope, vs.Name, err)
 		}
-	case pypi:
-		*vs.indirect, err = PyPIPackageLatestVersion(ctx, vs.name)
+	case PyPI:
+		*vs.Indirect, err = PyPIPackageLatestVersion(ctx, vs.Name)
 		if err != nil {
-			return fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", vs.name, err)
+			return fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", vs.Name, err)
 		}
-	case npm:
-		*vs.indirect, err = NPMPackageLatestVersion(ctx, vs.name)
+	case NPM:
+		*vs.Indirect, err = NPMPackageLatestVersion(ctx, vs.Name)
 		if err != nil {
-			return fmt.Errorf("failed to fetch the latest version of %s from NPM: %w", vs.name, err)
+			return fmt.Errorf("failed to fetch the latest version of %s from NPM: %w", vs.Name, err)
 		}
 	}
 
 	return nil
 }
 
-func getSetterFuncs(vss []*versionSetter) []setterFunc {
+func getSetterFuncs(vss []VersionSetter) []setterFunc {
 	setterFuncs := make([]setterFunc, 0, len(vss))
 
-	for _, vs := range vss {
-		if *vs.indirect == "LATEST" {
-			setterFuncs = append(setterFuncs, vs.Func)
+	for i := range vss {
+		if *vss[i].Indirect == "LATEST" {
+			setterFuncs = append(setterFuncs, vss[i].Func)
 		}
 	}
 
@@ -423,9 +423,9 @@ func setVersions(ctx context.Context, fns []setterFunc) error {
 }
 
 func (c *GoProjectCmd) BeforeReset() error {
-	c.vss = []*versionSetter{
-		{registry: github, scope: "golangci", name: "golangci-lint", indirect: &c.GolangcilintVersion},
-		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
+	c.VersionSetters = []VersionSetter{
+		{Registry: GitHub, Scope: "golangci", Name: "golangci-lint", Indirect: &c.GolangcilintVersion},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
 	}
 
 	return nil
@@ -437,7 +437,7 @@ func (c *GoProjectCmd) AfterApply() (err error) {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	setterFuncs := getSetterFuncs(c.vss)
+	setterFuncs := getSetterFuncs(c.VersionSetters)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
@@ -459,16 +459,16 @@ func (c *GoProjectCmd) Run() (err error) {
 }
 
 func (c *PythonProjectCmd) BeforeReset() error {
-	c.vss = []*versionSetter{
-		{registry: github, scope: "psf", name: "black", indirect: &c.BlackVersion},
-		{registry: github, scope: "godaddy", name: "tartufo", indirect: &c.TartufoVersion},
-		{registry: pypi, name: "flake8", indirect: &c.Flake8Version},
-		{registry: pypi, name: "ipykernel", indirect: &c.IPyKernelVersion},
-		{registry: pypi, name: "mypy", indirect: &c.MypyVersion},
-		{registry: pypi, name: "pytest", indirect: &c.PytestVersion},
-		{registry: pypi, name: "pytest-mock", indirect: &c.PytestMockVersion},
-		{registry: pypi, name: "pytest-cov", indirect: &c.PytestCovVersion},
-		{registry: pypi, name: "Sphinx", indirect: &c.SphinxVersion},
+	c.VersionSetters = []VersionSetter{
+		{Registry: GitHub, Scope: "psf", Name: "black", Indirect: &c.BlackVersion},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
+		{Registry: PyPI, Name: "flake8", Indirect: &c.Flake8Version},
+		{Registry: PyPI, Name: "ipykernel", Indirect: &c.IPyKernelVersion},
+		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion},
+		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion},
+		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion},
+		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion},
+		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion},
 	}
 
 	return nil
@@ -480,7 +480,7 @@ func (c *PythonProjectCmd) AfterApply() (err error) {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	setterFuncs := getSetterFuncs(c.vss)
+	setterFuncs := getSetterFuncs(c.VersionSetters)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 
@@ -511,21 +511,21 @@ func (c *PythonProjectCmd) Run() (err error) {
 }
 
 func (c *TsCdkProjectCmd) BeforeReset() error {
-	c.vss = []*versionSetter{
-		{registry: npm, name: "eslint", indirect: &c.EslintVersion},
-		{registry: npm, name: "@eslint/js", indirect: &c.EslintJsVersion},
-		{registry: npm, name: "typescript-eslint", indirect: &c.TypeScriptEslintVersion},
-		{registry: npm, name: "vitest", indirect: &c.VitestVersion},
-		{registry: npm, name: "@vitest/coverage-v8", indirect: &c.VitestCoverageV8Version},
-		{registry: npm, name: "aws-cdk", indirect: &c.AwsCdkCliVersion},
-		{registry: npm, name: "esbuild", indirect: &c.EsbuildVersion},
-		{registry: npm, name: "prettier", indirect: &c.PrettierVersion},
-		{registry: npm, name: "tsx", indirect: &c.TsxVersion},
-		{registry: npm, name: "typescript", indirect: &c.TypeScriptVersion},
-		{registry: npm, name: "@aws-cdk/assert", indirect: &c.AwsCdkAssertVersion},
-		{registry: npm, name: "aws-cdk-lib", indirect: &c.AwsCdkLibVersion},
-		{registry: npm, name: "constructs", indirect: &c.ConstructsVersion},
-		{registry: npm, name: "yaml", indirect: &c.YamlVersion},
+	c.VersionSetters = []VersionSetter{
+		{Registry: NPM, Name: "eslint", Indirect: &c.EslintVersion},
+		{Registry: NPM, Name: "@eslint/js", Indirect: &c.EslintJsVersion},
+		{Registry: NPM, Name: "typescript-eslint", Indirect: &c.TypeScriptEslintVersion},
+		{Registry: NPM, Name: "vitest", Indirect: &c.VitestVersion},
+		{Registry: NPM, Name: "@vitest/coverage-v8", Indirect: &c.VitestCoverageV8Version},
+		{Registry: NPM, Name: "aws-cdk", Indirect: &c.AwsCdkCliVersion},
+		{Registry: NPM, Name: "esbuild", Indirect: &c.EsbuildVersion},
+		{Registry: NPM, Name: "prettier", Indirect: &c.PrettierVersion},
+		{Registry: NPM, Name: "tsx", Indirect: &c.TsxVersion},
+		{Registry: NPM, Name: "typescript", Indirect: &c.TypeScriptVersion},
+		{Registry: NPM, Name: "@aws-cdk/assert", Indirect: &c.AwsCdkAssertVersion},
+		{Registry: NPM, Name: "aws-cdk-lib", Indirect: &c.AwsCdkLibVersion},
+		{Registry: NPM, Name: "constructs", Indirect: &c.ConstructsVersion},
+		{Registry: NPM, Name: "yaml", Indirect: &c.YamlVersion},
 	}
 
 	return nil
@@ -537,7 +537,7 @@ func (c *TsCdkProjectCmd) AfterApply() (err error) {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	setterFuncs := getSetterFuncs(c.vss)
+	setterFuncs := getSetterFuncs(c.VersionSetters)
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(c.TimeoutSeconds)*time.Second)
 

@@ -428,11 +428,11 @@ func TestProjects(t *testing.T) {
 		assert.Equal(t, cmd.ProjectName, packageJson.Name)
 		assert.Equal(t, fmt.Sprintf("https://github.com/kxue43/%s", cmd.ProjectName), packageJson.Repository.Url)
 
-		for _, vs := range cmd.vss {
-			if version, ok := packageJson.DevDependencies[vs.name]; ok {
+		for _, vs := range cmd.VersionSetters {
+			if version, ok := packageJson.DevDependencies[vs.Name]; ok {
 				assert.Equal(t, "^"+npmVersion, version)
 			} else {
-				assert.Equal(t, "^"+npmVersion, packageJson.Dependencies[vs.name])
+				assert.Equal(t, "^"+npmVersion, packageJson.Dependencies[vs.Name])
 			}
 		}
 
