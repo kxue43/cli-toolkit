@@ -78,6 +78,8 @@ linters:
               desc: This web framework doesn't fully support the http.Handler interface.
     errcheck:
       check-type-assertions: true
+    exhaustive:
+      default-signifies-exhaustive: true
     govet:
       enable-all: true
     nolintlint:
