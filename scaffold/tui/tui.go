@@ -11,32 +11,32 @@ import (
 )
 
 type (
-	DepItem struct {
+	depItem struct {
 		scaffold.VersionSetter
 		ti textinput.Model
 	}
 
-	PythonModel struct {
-		cmd         *scaffold.PythonProjectCmd
-		Title       string
-		Description string
-		Deps        []DepItem
-		index       int
-		navMode     bool
-		working     bool
+	pythonModel struct {
+		cmd     *scaffold.PythonProjectCmd
+		title   string
+		desc    string
+		deps    []depItem
+		index   int
+		navMode bool
+		working bool
 	}
 )
 
-func InitialPythonModel(cmd *scaffold.PythonProjectCmd) PythonModel {
+func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonModel {
 	vss := cmd.VersionSetters
 
-	pm := PythonModel{
-		Title:       "Python Project",
-		Description: "Scaffold a Python project.",
-		Deps:        make([]DepItem, len(vss)),
-		navMode:     true,
-		index:       0,
-		cmd:         cmd,
+	pm := pythonModel{
+		title:   "Python Project",
+		desc:    "Scaffold a Python project.",
+		deps:    make([]depItem, len(vss)),
+		navMode: true,
+		index:   0,
+		cmd:     cmd,
 	}
 
 	var ti textinput.Model
@@ -50,7 +50,7 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) PythonModel {
 		ti.Width = 20
 		ti.Prompt = " "
 
-		pm.Deps[i] = DepItem{
+		pm.deps[i] = depItem{
 			VersionSetter: vss[i],
 			ti:            ti,
 		}
@@ -59,18 +59,18 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) PythonModel {
 	return pm
 }
 
-func (pm PythonModel) Init() tea.Cmd {
+func (pm pythonModel) Init() tea.Cmd {
 	return nil
 }
 
-func (pm PythonModel) View() string {
+func (pm pythonModel) View() string {
 	if pm.working {
 		return "I'm working on it ..."
 	}
 
 	var b strings.Builder
 
-	for i, item := range pm.Deps {
+	for i, item := range pm.deps {
 		if i == pm.index {
 			b.WriteString("> ")
 		} else {
@@ -83,16 +83,16 @@ func (pm PythonModel) View() string {
 		b.WriteString("\n")
 	}
 
-	if pm.index == len(pm.Deps) {
+	if pm.index == len(pm.deps) {
 		b.WriteString("\n> [ Submit ]\n")
 	} else {
 		b.WriteString("\n  [ Submit ]\n")
 	}
 
-	return fmt.Sprintf("%s\n\n%s\n\n%s", pm.Title, pm.Description, b.String())
+	return fmt.Sprintf("%s\n\n%s\n\n%s", pm.title, pm.desc, b.String())
 }
 
-func (pm *PythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
+func (pm *pythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return nil
@@ -106,7 +106,7 @@ func (pm *PythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
 
 		return nil
 	case tea.KeyDown:
-		if pm.index < len(pm.Deps) {
+		if pm.index < len(pm.deps) {
 			pm.index += 1
 		}
 
@@ -114,7 +114,7 @@ func (pm *PythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
 	case tea.KeyEnter:
 		pm.navMode = false
 
-		cmd = pm.Deps[pm.index].ti.Focus()
+		cmd = pm.deps[pm.index].ti.Focus()
 
 		return cmd
 	default:
@@ -122,16 +122,16 @@ func (pm *PythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
 	}
 }
 
-func (pm *PythonModel) backToNavMode() {
-	pm.Deps[pm.index].ti.Blur()
+func (pm *pythonModel) backToNavMode() {
+	pm.deps[pm.index].ti.Blur()
 
 	pm.navMode = true
 }
 
-func (pm *PythonModel) scaffoldCmd() tea.Msg {
-	for i := range pm.Deps {
-		if v := pm.Deps[i].ti.Value(); v != "" {
-			*pm.Deps[i].Indirect = v
+func (pm *pythonModel) scaffoldCmd() tea.Msg {
+	for i := range pm.deps {
+		if v := pm.deps[i].ti.Value(); v != "" {
+			*pm.deps[i].Indirect = v
 		}
 	}
 
@@ -146,13 +146,13 @@ func (pm *PythonModel) scaffoldCmd() tea.Msg {
 	return tea.Quit()
 }
 
-func (pm PythonModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (pm pythonModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if ok && keyMsg.Type == tea.KeyEsc {
 		return pm, tea.Quit
-	} else if ok && keyMsg.Type == tea.KeyEnter && pm.index == len(pm.Deps) {
+	} else if ok && keyMsg.Type == tea.KeyEnter && pm.index == len(pm.deps) {
 		pm.working = true
 
 		return pm, pm.scaffoldCmd
@@ -170,7 +170,7 @@ func (pm PythonModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return pm, nil
 	}
 
-	pm.Deps[pm.index].ti, cmd = pm.Deps[pm.index].ti.Update(msg)
+	pm.deps[pm.index].ti, cmd = pm.deps[pm.index].ti.Update(msg)
 
 	return pm, cmd
 }
