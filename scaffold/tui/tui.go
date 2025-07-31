@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kxue43/cli-toolkit/scaffold"
 )
@@ -17,6 +20,7 @@ type (
 	}
 
 	pythonModel struct {
+		help    help.Model
 		cmd     *scaffold.PythonProjectCmd
 		title   string
 		desc    string
@@ -25,7 +29,53 @@ type (
 		navMode bool
 		working bool
 	}
+
+	keyMap struct {
+		up      key.Binding
+		down    key.Binding
+		select_ key.Binding
+		help    key.Binding
+		quit    key.Binding
+	}
 )
+
+var (
+	keys = keyMap{
+		up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "move up"),
+		),
+		down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "move down"),
+		),
+		select_: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("\u21B5", "select/de-select"),
+		),
+		help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "toggle help"),
+		),
+		quit: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "quit"),
+		),
+	}
+
+	indentedStyle = lipgloss.NewStyle().PaddingLeft(2)
+)
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.help, k.quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.up, k.down, k.select_},
+		{k.help, k.quit},
+	}
+}
 
 func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonModel {
 	vss := cmd.VersionSetters
@@ -37,6 +87,7 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonModel {
 		navMode: true,
 		index:   0,
 		cmd:     cmd,
+		help:    help.New(),
 	}
 
 	var ti textinput.Model
@@ -65,7 +116,7 @@ func (pm pythonModel) Init() tea.Cmd {
 
 func (pm pythonModel) View() string {
 	if pm.working {
-		return "I'm working on it ..."
+		return "I'm working on it ...\n"
 	}
 
 	var b strings.Builder
@@ -78,40 +129,39 @@ func (pm pythonModel) View() string {
 		}
 
 		b.WriteString(item.Name)
-		b.WriteString(":")
+		b.WriteRune(':')
 		b.WriteString(item.ti.View())
-		b.WriteString("\n")
+		b.WriteRune('\n')
 	}
 
 	if pm.index == len(pm.deps) {
-		b.WriteString("\n> [ Submit ]\n")
+		b.WriteString("\n> [ Submit ]\n\n")
 	} else {
-		b.WriteString("\n  [ Submit ]\n")
+		b.WriteString("\n  [ Submit ]\n\n")
 	}
+
+	b.WriteString(indentedStyle.Render(pm.help.View(keys)))
+
+	b.WriteRune('\n')
 
 	return fmt.Sprintf("%s\n\n%s\n\n%s", pm.title, pm.desc, b.String())
 }
 
-func (pm *pythonModel) navModeUpdate(msg tea.Msg) (cmd tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return nil
-	}
-
-	switch keyMsg.Type {
-	case tea.KeyUp:
+func (pm *pythonModel) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.up):
 		if pm.index > 0 {
 			pm.index -= 1
 		}
 
 		return nil
-	case tea.KeyDown:
+	case key.Matches(msg, keys.down):
 		if pm.index < len(pm.deps) {
 			pm.index += 1
 		}
 
 		return nil
-	case tea.KeyEnter:
+	case key.Matches(msg, keys.select_):
 		pm.navMode = false
 
 		cmd = pm.deps[pm.index].ti.Focus()
@@ -149,28 +199,38 @@ func (pm *pythonModel) scaffoldCmd() tea.Msg {
 func (pm pythonModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if ok && keyMsg.Type == tea.KeyEsc {
-		return pm, tea.Quit
-	} else if ok && keyMsg.Type == tea.KeyEnter && pm.index == len(pm.deps) {
-		pm.working = true
-
-		return pm, pm.scaffoldCmd
-	}
-
-	if pm.navMode {
-		cmd = pm.navModeUpdate(msg)
-
-		return pm, cmd
-	}
-
-	if ok && (keyMsg.Type == tea.KeyEnter) {
-		pm.backToNavMode()
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		pm.help.Width = msg.Width
 
 		return pm, nil
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, keys.quit):
+			return pm, tea.Quit
+		case pm.index == len(pm.deps) && key.Matches(msg, keys.select_):
+			pm.working = true
+
+			return pm, pm.scaffoldCmd
+		case pm.navMode && key.Matches(msg, keys.help):
+			pm.help.ShowAll = !pm.help.ShowAll
+
+			return pm, nil
+		case pm.navMode:
+			cmd = pm.navModeUpdate(msg)
+
+			return pm, cmd
+		case !pm.navMode && key.Matches(msg, keys.select_):
+			pm.backToNavMode()
+
+			return pm, nil
+		case !pm.navMode:
+			pm.deps[pm.index].ti, cmd = pm.deps[pm.index].ti.Update(msg)
+
+			return pm, cmd
+		default:
+		}
 	}
 
-	pm.deps[pm.index].ti, cmd = pm.deps[pm.index].ti.Update(msg)
-
-	return pm, cmd
+	return pm, nil
 }
