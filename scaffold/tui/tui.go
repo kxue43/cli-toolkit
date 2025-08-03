@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -19,11 +18,9 @@ type (
 		ti textinput.Model
 	}
 
-	pythonModel struct {
+	pythonDeps struct {
 		help    help.Model
 		cmd     *scaffold.PythonProjectCmd
-		title   string
-		desc    string
 		deps    []depItem
 		index   int
 		navMode bool
@@ -77,12 +74,10 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	}
 }
 
-func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonModel {
+func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	vss := cmd.VersionSetters
 
-	pm := pythonModel{
-		title:   "Python Project",
-		desc:    "Scaffold a Python project.",
+	m := pythonDeps{
 		deps:    make([]depItem, len(vss)),
 		navMode: true,
 		index:   0,
@@ -101,28 +96,28 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonModel {
 		ti.Width = 20
 		ti.Prompt = " "
 
-		pm.deps[i] = depItem{
+		m.deps[i] = depItem{
 			VersionSetter: vss[i],
 			ti:            ti,
 		}
 	}
 
-	return pm
+	return m
 }
 
-func (pm pythonModel) Init() tea.Cmd {
+func (m pythonDeps) Init() tea.Cmd {
 	return nil
 }
 
-func (pm pythonModel) View() string {
-	if pm.working {
+func (m pythonDeps) View() string {
+	if m.working {
 		return "I'm working on it ...\n"
 	}
 
 	var b strings.Builder
 
-	for i, item := range pm.deps {
-		if i == pm.index {
+	for i, item := range m.deps {
+		if i == m.index {
 			b.WriteString("> ")
 		} else {
 			b.WriteString("  ")
@@ -134,37 +129,37 @@ func (pm pythonModel) View() string {
 		b.WriteRune('\n')
 	}
 
-	if pm.index == len(pm.deps) {
+	if m.index == len(m.deps) {
 		b.WriteString("\n> [ Submit ]\n\n")
 	} else {
 		b.WriteString("\n  [ Submit ]\n\n")
 	}
 
-	b.WriteString(indentedStyle.Render(pm.help.View(keys)))
+	b.WriteString(indentedStyle.Render(m.help.View(keys)))
 
 	b.WriteRune('\n')
 
-	return fmt.Sprintf("%s\n\n%s\n\n%s", pm.title, pm.desc, b.String())
+	return b.String()
 }
 
-func (pm *pythonModel) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
+func (m *pythonDeps) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.up):
-		if pm.index > 0 {
-			pm.index -= 1
+		if m.index > 0 {
+			m.index -= 1
 		}
 
 		return nil
 	case key.Matches(msg, keys.down):
-		if pm.index < len(pm.deps) {
-			pm.index += 1
+		if m.index < len(m.deps) {
+			m.index += 1
 		}
 
 		return nil
 	case key.Matches(msg, keys.select_):
-		pm.navMode = false
+		m.navMode = false
 
-		cmd = pm.deps[pm.index].ti.Focus()
+		cmd = m.deps[m.index].ti.Focus()
 
 		return cmd
 	default:
@@ -172,65 +167,65 @@ func (pm *pythonModel) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 	}
 }
 
-func (pm *pythonModel) backToNavMode() {
-	pm.deps[pm.index].ti.Blur()
+func (m *pythonDeps) backToNavMode() {
+	m.deps[m.index].ti.Blur()
 
-	pm.navMode = true
+	m.navMode = true
 }
 
-func (pm *pythonModel) scaffoldCmd() tea.Msg {
-	for i := range pm.deps {
-		if v := pm.deps[i].ti.Value(); v != "" {
-			*pm.deps[i].Indirect = v
+func (m *pythonDeps) scaffoldCmd() tea.Msg {
+	for i := range m.deps {
+		if v := m.deps[i].ti.Value(); v != "" {
+			*m.deps[i].Indirect = v
 		}
 	}
 
-	pm.cmd.ProjectName = "fs-walk"
-	pm.cmd.PythonVersion = scaffold.PythonVersion{Major: "3", Minor: "12"}
-	pm.cmd.TimeoutSeconds = 1
+	m.cmd.ProjectName = "fs-walk"
+	m.cmd.PythonVersion = scaffold.PythonVersion{Major: "3", Minor: "12"}
+	m.cmd.TimeoutSeconds = 1
 
-	_ = pm.cmd.AfterApply()
+	_ = m.cmd.AfterApply()
 
-	_ = pm.cmd.Run()
+	_ = m.cmd.Run()
 
 	return tea.Quit()
 }
 
-func (pm pythonModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m pythonDeps) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		pm.help.Width = msg.Width
+		m.help.Width = msg.Width
 
-		return pm, nil
+		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, keys.quit):
-			return pm, tea.Quit
-		case pm.index == len(pm.deps) && key.Matches(msg, keys.select_):
-			pm.working = true
+			return m, tea.Quit
+		case m.index == len(m.deps) && key.Matches(msg, keys.select_):
+			m.working = true
 
-			return pm, pm.scaffoldCmd
-		case pm.navMode && key.Matches(msg, keys.help):
-			pm.help.ShowAll = !pm.help.ShowAll
+			return m, m.scaffoldCmd
+		case m.navMode && key.Matches(msg, keys.help):
+			m.help.ShowAll = !m.help.ShowAll
 
-			return pm, nil
-		case pm.navMode:
-			cmd = pm.navModeUpdate(msg)
+			return m, nil
+		case m.navMode:
+			cmd = m.navModeUpdate(msg)
 
-			return pm, cmd
-		case !pm.navMode && key.Matches(msg, keys.select_):
-			pm.backToNavMode()
+			return m, cmd
+		case !m.navMode && key.Matches(msg, keys.select_):
+			m.backToNavMode()
 
-			return pm, nil
-		case !pm.navMode:
-			pm.deps[pm.index].ti, cmd = pm.deps[pm.index].ti.Update(msg)
+			return m, nil
+		case !m.navMode:
+			m.deps[m.index].ti, cmd = m.deps[m.index].ti.Update(msg)
 
-			return pm, cmd
+			return m, cmd
 		default:
 		}
 	}
 
-	return pm, nil
+	return m, nil
 }
