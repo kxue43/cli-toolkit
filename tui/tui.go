@@ -27,17 +27,19 @@ type (
 		working bool
 	}
 
-	keyMap struct {
+	navModeKeyMap struct{}
+
+	inputModeKeyMap struct{}
+)
+
+var (
+	keys = struct {
 		up      key.Binding
 		down    key.Binding
 		select_ key.Binding
 		help    key.Binding
 		quit    key.Binding
-	}
-)
-
-var (
-	keys = keyMap{
+	}{
 		up: key.NewBinding(
 			key.WithKeys("up", "k"),
 			key.WithHelp("↑/k", "move up"),
@@ -63,14 +65,25 @@ var (
 	indentedStyle = lipgloss.NewStyle().PaddingLeft(2)
 )
 
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.help, k.quit}
+func (navModeKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{keys.help, keys.quit}
 }
 
-func (k keyMap) FullHelp() [][]key.Binding {
+func (navModeKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.up, k.down, k.select_},
-		{k.help, k.quit},
+		{keys.up, keys.down, keys.select_},
+		{keys.help, keys.quit},
+	}
+}
+
+func (inputModeKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{keys.select_, keys.quit}
+}
+
+func (inputModeKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{keys.select_, keys.quit},
+		{keys.select_, keys.quit},
 	}
 }
 
@@ -135,7 +148,11 @@ func (m pythonDeps) View() string {
 		b.WriteString("\n  [ Submit ]\n\n")
 	}
 
-	b.WriteString(indentedStyle.Render(m.help.View(keys)))
+	if m.navMode {
+		b.WriteString(indentedStyle.Render(m.help.View(navModeKeyMap{})))
+	} else {
+		b.WriteString(indentedStyle.Render(m.help.View(inputModeKeyMap{})))
+	}
 
 	b.WriteRune('\n')
 
@@ -158,6 +175,7 @@ func (m *pythonDeps) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 		return nil
 	case key.Matches(msg, keys.select_):
 		m.navMode = false
+		m.help.ShowAll = false
 
 		cmd = m.deps[m.index].ti.Focus()
 
