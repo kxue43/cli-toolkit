@@ -15,7 +15,8 @@ import (
 type (
 	depItem struct {
 		scaffold.VersionSetter
-		ti textinput.Model
+		ti   textinput.Model
+		drop bool
 	}
 
 	pythonDeps struct {
@@ -37,6 +38,7 @@ var (
 		up      key.Binding
 		down    key.Binding
 		select_ key.Binding
+		tick    key.Binding
 		help    key.Binding
 		quit    key.Binding
 	}{
@@ -52,6 +54,10 @@ var (
 			key.WithKeys("enter"),
 			key.WithHelp("\u21B5", "select/de-select"),
 		),
+		tick: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "tick/untick"),
+		),
 		help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "toggle help"),
@@ -62,7 +68,7 @@ var (
 		),
 	}
 
-	indentedStyle = lipgloss.NewStyle().PaddingLeft(2)
+	highlightedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 )
 
 func (navModeKeyMap) ShortHelp() []key.Binding {
@@ -71,7 +77,7 @@ func (navModeKeyMap) ShortHelp() []key.Binding {
 
 func (navModeKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{keys.up, keys.down, keys.select_},
+		{keys.up, keys.down, keys.select_, keys.tick},
 		{keys.help, keys.quit},
 	}
 }
@@ -129,29 +135,41 @@ func (m pythonDeps) View() string {
 
 	var b strings.Builder
 
-	for i, item := range m.deps {
-		if i == m.index {
-			b.WriteString("> ")
+	var prompt string
+
+	b.WriteString("Let's start a Python project!\n\n")
+
+	for i := range m.deps {
+		if m.deps[i].drop {
+			prompt = "[ ] " + m.deps[i].Name + ":"
 		} else {
-			b.WriteString("  ")
+			prompt = "[x] " + m.deps[i].Name + ":"
 		}
 
-		b.WriteString(item.Name)
-		b.WriteRune(':')
-		b.WriteString(item.ti.View())
+		if i == m.index {
+			b.WriteString(highlightedStyle.Render(prompt))
+		} else {
+			b.WriteString(prompt)
+		}
+
+		b.WriteString(m.deps[i].ti.View())
 		b.WriteRune('\n')
 	}
 
+	b.WriteRune('\n')
+
 	if m.index == len(m.deps) {
-		b.WriteString("\n> [ Submit ]\n\n")
+		b.WriteString(highlightedStyle.Render("[ Submit ]"))
 	} else {
-		b.WriteString("\n  [ Submit ]\n\n")
+		b.WriteString("[ Submit ]")
 	}
 
+	b.WriteString("\n\n")
+
 	if m.navMode {
-		b.WriteString(indentedStyle.Render(m.help.View(navModeKeyMap{})))
+		b.WriteString(m.help.View(navModeKeyMap{}))
 	} else {
-		b.WriteString(indentedStyle.Render(m.help.View(inputModeKeyMap{})))
+		b.WriteString(m.help.View(inputModeKeyMap{}))
 	}
 
 	b.WriteRune('\n')
@@ -180,6 +198,10 @@ func (m *pythonDeps) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 		cmd = m.deps[m.index].ti.Focus()
 
 		return cmd
+	case key.Matches(msg, keys.tick):
+		m.deps[m.index].drop = !m.deps[m.index].drop
+
+		return nil
 	default:
 		return nil
 	}
@@ -245,5 +267,7 @@ func (m pythonDeps) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	return m, nil
+	m.deps[m.index].ti, cmd = m.deps[m.index].ti.Update(msg)
+
+	return m, cmd
 }
