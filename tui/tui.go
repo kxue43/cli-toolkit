@@ -99,12 +99,32 @@ var (
 		),
 	}
 
-	highlightedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	palette = struct {
+		magenta lipgloss.Color
+		yellow  lipgloss.Color
+	}{
+		magenta: lipgloss.Color("212"),
+		yellow:  lipgloss.Color("184"),
+	}
 
-	depsGroupStyle = lipgloss.NewStyle().Background(lipgloss.Color("184"))
-
-	// miscStyle = lipgloss.NewStyle().Background(lipgloss.Color("231")).Foreground(lipgloss.Color("016"))
+	highlightedStyle = getStyle(false, true, false)
 )
+
+func getStyle(dropped, highlighted, group bool) lipgloss.Style {
+	style := lipgloss.NewStyle()
+
+	style = style.Strikethrough(dropped)
+
+	if highlighted {
+		style = style.Foreground(palette.magenta)
+	}
+
+	if group {
+		style = style.Background(palette.yellow)
+	}
+
+	return style
+}
 
 func (navModeKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{keys.help, keys.quit}
@@ -177,20 +197,15 @@ func (di *depItem) Desc() string {
 func (di *depItem) View() string {
 	var b strings.Builder
 
-	var prompt string
-
-	if di.drop {
-		prompt = "[ ] " + di.Name + ":"
-	} else {
-		prompt = "[x] " + di.Name + ":"
-	}
+	style := getStyle(di.drop, di.highlighted, false)
 
 	if di.highlighted {
-		b.WriteString(highlightedStyle.Render(prompt))
+		b.WriteString(highlightedStyle.Render("> "))
 	} else {
-		b.WriteString(prompt)
+		b.WriteString("  ")
 	}
 
+	b.WriteString(style.Render(di.Name + ":"))
 	b.WriteString(di.ti.View())
 
 	return b.String()
@@ -253,27 +268,17 @@ func (dg *depsGroup) Desc() string {
 }
 
 func (dg *depsGroup) View() string {
-	var (
-		b      strings.Builder
-		prompt string
-	)
+	var b strings.Builder
 
-	text := lipgloss.Place(7, 1, lipgloss.Left, lipgloss.Center, depsGroupStyle.Render(dg.name))
-	b.WriteString(depsGroupStyle.Render(text))
-
-	b.WriteRune(' ')
-
-	if dg.drop {
-		prompt = "[ ]"
-	} else {
-		prompt = "[x]"
-	}
+	style := getStyle(dg.drop, false, true)
 
 	if dg.highlighted {
-		b.WriteString(highlightedStyle.Render(prompt))
+		b.WriteString(highlightedStyle.Render("> "))
 	} else {
-		b.WriteString(prompt)
+		b.WriteString("  ")
 	}
+
+	b.WriteString(style.Render(dg.name))
 
 	return b.String()
 }
@@ -371,11 +376,15 @@ func (m pythonDeps) View() string {
 
 	b.WriteRune('\n')
 
+	style := getStyle(false, m.index == len(m.items), false)
+
 	if m.index == len(m.items) {
-		b.WriteString(highlightedStyle.Render("[ Submit ]"))
+		b.WriteString(highlightedStyle.Render("> "))
 	} else {
-		b.WriteString("[ Submit ]")
+		b.WriteString("  ")
 	}
+
+	b.WriteString(style.Render("[ Submit ]"))
 
 	b.WriteString("\n\n")
 
