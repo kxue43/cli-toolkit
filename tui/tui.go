@@ -31,16 +31,20 @@ type (
 	navModeKeyMap struct{}
 
 	inputModeKeyMap struct{}
+
+	submitButtonKeyMap struct{}
 )
 
 var (
 	keys = struct {
-		up      key.Binding
-		down    key.Binding
-		select_ key.Binding
-		tick    key.Binding
-		help    key.Binding
-		quit    key.Binding
+		up     key.Binding
+		down   key.Binding
+		input  key.Binding
+		finish key.Binding
+		submit key.Binding
+		tick   key.Binding
+		help   key.Binding
+		quit   key.Binding
 	}{
 		up: key.NewBinding(
 			key.WithKeys("up", "k"),
@@ -50,9 +54,17 @@ var (
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "move down"),
 		),
-		select_: key.NewBinding(
+		input: key.NewBinding(
 			key.WithKeys("enter"),
-			key.WithHelp("\u21B5", "select/de-select"),
+			key.WithHelp("\u21B5", "input mode"),
+		),
+		finish: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("\u21B5", "finish input"),
+		),
+		submit: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("\u21B5", "submit"),
 		),
 		tick: key.NewBinding(
 			key.WithKeys("x"),
@@ -77,19 +89,30 @@ func (navModeKeyMap) ShortHelp() []key.Binding {
 
 func (navModeKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{keys.up, keys.down, keys.select_, keys.tick},
+		{keys.up, keys.down, keys.input, keys.tick},
 		{keys.help, keys.quit},
 	}
 }
 
 func (inputModeKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{keys.select_, keys.quit}
+	return []key.Binding{keys.finish, keys.quit}
 }
 
 func (inputModeKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{keys.select_, keys.quit},
-		{keys.select_, keys.quit},
+		{keys.finish, keys.quit},
+		{keys.finish, keys.quit},
+	}
+}
+
+func (submitButtonKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{keys.help, keys.quit}
+}
+
+func (submitButtonKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{keys.up, keys.down, keys.submit},
+		{keys.help, keys.quit},
 	}
 }
 
@@ -166,7 +189,9 @@ func (m pythonDeps) View() string {
 
 	b.WriteString("\n\n")
 
-	if m.navMode {
+	if m.navMode && m.index == len(m.deps) {
+		b.WriteString(m.help.View(submitButtonKeyMap{}))
+	} else if m.navMode {
 		b.WriteString(m.help.View(navModeKeyMap{}))
 	} else {
 		b.WriteString(m.help.View(inputModeKeyMap{}))
@@ -191,7 +216,7 @@ func (m *pythonDeps) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 		}
 
 		return nil
-	case key.Matches(msg, keys.select_):
+	case key.Matches(msg, keys.input):
 		m.navMode = false
 		m.help.ShowAll = false
 
@@ -243,7 +268,7 @@ func (m pythonDeps) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, keys.quit):
 			return m, tea.Quit
-		case m.index == len(m.deps) && key.Matches(msg, keys.select_):
+		case m.index == len(m.deps) && key.Matches(msg, keys.input):
 			m.working = true
 
 			return m, m.scaffoldCmd
@@ -255,7 +280,7 @@ func (m pythonDeps) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.navModeUpdate(msg)
 
 			return m, cmd
-		case !m.navMode && key.Matches(msg, keys.select_):
+		case !m.navMode && key.Matches(msg, keys.input):
 			m.backToNavMode()
 
 			return m, nil
