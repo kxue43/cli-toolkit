@@ -31,8 +31,7 @@ type (
 	}
 
 	navItem interface {
-		Highlight()
-		UnHighlight()
+		ToggleHighlight()
 		ToggleTick()
 		Desc() string
 		Update(tea.Msg) tea.Cmd
@@ -140,12 +139,8 @@ func (submitButtonKeyMap) FullHelp() [][]key.Binding {
 	}
 }
 
-func (di *depItem) Highlight() {
-	di.highlighted = true
-}
-
-func (di *depItem) UnHighlight() {
-	di.highlighted = false
+func (di *depItem) ToggleHighlight() {
+	di.highlighted = !di.highlighted
 }
 
 func (di *depItem) tick() {
@@ -225,12 +220,8 @@ func (di *depItem) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (dg *depsGroup) Highlight() {
-	dg.highlighted = true
-}
-
-func (dg *depsGroup) UnHighlight() {
-	dg.highlighted = false
+func (dg *depsGroup) ToggleHighlight() {
+	dg.highlighted = !dg.highlighted
 }
 
 func (dg *depsGroup) tick() {
@@ -401,27 +392,35 @@ func (m pythonDeps) View() string {
 	return b.String()
 }
 
+func (m *pythonDeps) highlightUp(index int) {
+	if index < len(m.items) {
+		m.items[index].ToggleHighlight()
+	}
+
+	m.items[index-1].ToggleHighlight()
+}
+
+func (m *pythonDeps) highlightDown(index int) {
+	m.items[index].ToggleHighlight()
+
+	if index+1 < len(m.items) {
+		m.items[index+1].ToggleHighlight()
+	}
+}
+
 func (m *pythonDeps) navModeUpdate(msg tea.KeyMsg) (cmd tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.up):
 		if m.index > 0 {
-			if m.index < len(m.items) {
-				m.items[m.index].UnHighlight()
-			}
-
+			m.highlightUp(m.index)
 			m.index -= 1
-			m.items[m.index].Highlight()
 		}
 
 		return nil
 	case key.Matches(msg, keys.down):
 		if m.index < len(m.items) {
-			m.items[m.index].UnHighlight()
-
+			m.highlightDown(m.index)
 			m.index += 1
-			if m.index < len(m.items) {
-				m.items[m.index].Highlight()
-			}
 		}
 
 		return nil
