@@ -14,6 +14,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/davecgh/go-spew v1.1.1
 	github.com/goccy/go-yaml v1.18.0
+	github.com/libgit2/git2go/v34 v34.0.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/stretchr/testify v1.10.0
 	github.com/yuin/goldmark v1.7.13
@@ -48,8 +49,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/libgit2/git2go/v34 => ./git2go

@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := all
 
+export PKG_CONFIG_PATH=$(CURDIR)/git2go/static-build/install/lib/pkgconfig
+
 test:
 	@go test ./...
 .PHONY: test
@@ -28,9 +30,13 @@ lint-all:
 	@pre-commit run --all-files
 .PHONY: lint-all
 
-tartufo:
-	@pre-commit run tartufo
-.PHONY: tartufo
-
 all: test lint
 .PHONY: all
+
+toolkit-git-hook:
+	@go build -tags static ./cmd/toolkit-git-hook
+.PHONY: toolkit-git-hook
+
+try-run-hook: toolkit-git-hook
+	@./toolkit-git-hook
+.PHONY: test-run-hook
