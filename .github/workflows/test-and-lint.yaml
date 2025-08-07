@@ -30,32 +30,16 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "^1.24.1"
+          go-version: "^1.25"
 
-      - name: Get libgit2 cache key from submodule committish
-        id: cache-key
-        run: echo "key=$(git ls-tree --object-only HEAD git2go)" >> $GITHUB_OUTPUT
-
-      - name: Cache libgit2
-        uses: actions/cache@v4
-        with:
-          path: git2go/static-build/install
-          key: ${{ steps.cache-key.outputs.key }}
-
-      - name: Build libgit2 from submodule
-        run: make install-static
-        working-directory: git2go
-      
       - name: Run unit test
         run: make test
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: "v2.2.1"
+          version: "v2.6.1"

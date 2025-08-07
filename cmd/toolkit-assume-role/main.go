@@ -37,6 +37,7 @@ func registerFlagsAndHelp() {
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
+
 		flag.PrintDefaults()
 	}
 }
