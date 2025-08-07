@@ -460,15 +460,15 @@ func (c *GoProjectCmd) Run() (err error) {
 
 func (c *PythonProjectCmd) BeforeReset() error {
 	c.VersionSetters = []VersionSetter{
-		{Registry: GitHub, Scope: "psf", Name: "black", Indirect: &c.BlackVersion},
-		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
-		{Registry: PyPI, Name: "flake8", Indirect: &c.Flake8Version},
 		{Registry: PyPI, Name: "ipykernel", Indirect: &c.IPyKernelVersion},
+		{Registry: GitHub, Scope: "psf", Name: "black", Indirect: &c.BlackVersion},
+		{Registry: PyPI, Name: "flake8", Indirect: &c.Flake8Version},
 		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion},
 		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion},
 		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion},
 		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion},
 		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
 	}
 
 	return nil
