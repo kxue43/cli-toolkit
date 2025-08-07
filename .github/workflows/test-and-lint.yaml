@@ -37,10 +37,21 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "^1.24.1"
-      
-      - name: Display Go version
-        run: go version
 
+      - name: Get libgit2 cache key from submodule committish
+        id: cache-key
+        run: echo "key=$(git ls-tree --object-only HEAD git2go)" >> $GITHUB_OUTPUT
+
+      - name: Cache libgit2
+        uses: actions/cache
+        with:
+          path: git2go/static-build/install
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Build libgit2 from submodule
+        run: make install-static
+        working-directory: git2go
+      
       - name: Run unit test
         run: go test ./...
 
