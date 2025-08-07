@@ -114,6 +114,7 @@ linters:
         text: "G114: Use of net/http serve function that has no support for setting timeouts"
     paths:
       - adhoc/
+      - git2go/
 
 issues:
   max-issues-per-linter: 0      
@@ -128,4 +129,7 @@ formatters:
         - standard
         - default
         - localmodule
+  exclusions:
+    paths:
+      - git2go/
     
