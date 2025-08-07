@@ -53,7 +53,7 @@ jobs:
         working-directory: git2go
       
       - name: Run unit test
-        run: go test ./...
+        run: make test
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@v8
