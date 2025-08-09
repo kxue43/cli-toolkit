@@ -31,6 +31,8 @@ Convert Markdown file to GitHub style HTML and display HTML in the default brows
 
 Arguments:
   <PATH>    Path to the Markdown file to convert.
+
+Flags:
 `
 )
 
@@ -43,6 +45,7 @@ func main() {
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
+		flag.PrintDefaults()
 	}
 
 	flag.Parse()
