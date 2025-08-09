@@ -32,11 +32,8 @@ jobs:
         with:
           go-version: "^{% .GoVersion %}"
       
-      - name: Display Go version
-        run: go version
-
       - name: Run unit test
-        run: go test ./...
+        run: make test
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@v8
