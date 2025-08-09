@@ -7,17 +7,21 @@ import (
 	"os"
 
 	"github.com/kxue43/cli-toolkit/auth"
+	"github.com/kxue43/cli-toolkit/version"
 )
 
 var (
-	logger          = log.New(os.Stderr, "toolkit-assume-role: ", 0)
+	logger = log.New(os.Stderr, "toolkit-assume-role: ", 0)
+
 	roleArn         string
 	mfaSerial       string
 	profile         string
 	region          string
 	roleSessionName string
 	durationSeconds int
-	helpMsg         = `Usage: %s -mfa-serial=STRING -profile=STRING [flags] <RoleArn>
+	showVersion     bool
+
+	helpMsg = `Usage: %s -mfa-serial=STRING -profile=STRING [flags] <RoleArn>
 
 Run AWS CLI credential process by assuming a role.
 
@@ -34,6 +38,7 @@ func registerFlagsAndHelp() {
 	flag.StringVar(&region, "region", "us-east-1", "The regional STS service endpoint to call.")
 	flag.StringVar(&roleSessionName, "role-session-name", "ToolkitCLI", "Role session name.")
 	flag.IntVar(&durationSeconds, "duration-seconds", 3600, "Role session duration seconds.")
+	flag.BoolVar(&showVersion, "version", false, "Show version information and quit.")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
@@ -66,6 +71,12 @@ func main() {
 	registerFlagsAndHelp()
 
 	flag.Parse()
+
+	if showVersion {
+		_, _ = fmt.Fprintln(flag.CommandLine.Output(), version.FromBuildInfo())
+
+		os.Exit(0)
+	}
 
 	validateInputs()
 
