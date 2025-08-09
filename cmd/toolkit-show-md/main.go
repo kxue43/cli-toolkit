@@ -13,10 +13,17 @@ import (
 	"github.com/pkg/browser"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+
+	"github.com/kxue43/cli-toolkit/version"
 )
 
 var (
 	logger = log.New(os.Stderr, "toolkit-show-md: ", 0)
+
+	//go:embed .github.style.tmplt
+	gitHubMarkdownTemplate []byte
+
+	showVersion bool
 
 	helpMsg = `Usage: %s <PATH>
 
@@ -25,8 +32,6 @@ Convert Markdown file to GitHub style HTML and display HTML in the default brows
 Arguments:
   <PATH>    Path to the Markdown file to convert.
 `
-	//go:embed .github.style.tmplt
-	gitHubMarkdownTemplate []byte
 )
 
 func main() {
@@ -34,11 +39,19 @@ func main() {
 
 	var err error
 
+	flag.BoolVar(&showVersion, "version", false, "Show version information and quit.")
+
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
 	}
 
 	flag.Parse()
+
+	if showVersion {
+		_, _ = fmt.Fprintln(flag.CommandLine.Output(), version.FromBuildInfo())
+
+		os.Exit(0)
+	}
 
 	args := flag.Args()
 	if len(args) != 1 {

@@ -6,11 +6,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/kxue43/cli-toolkit/version"
 )
 
 var (
-	port    string
-	logger  = log.New(os.Stderr, "toolkit-serve-static: ", 0)
+	logger = log.New(os.Stderr, "toolkit-serve-static: ", 0)
+
+	port        string
+	showVersion bool
+
 	helpMsg = `Usage: %s [flags] <DIR>
 
 Serve static contents from the <DIR> folder.
@@ -24,6 +29,7 @@ Flags:
 
 func main() {
 	flag.StringVar(&port, "port", "8090", "HTTP port of the local static files server.")
+	flag.BoolVar(&showVersion, "version", false, "Show version information and quit.")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(), helpMsg, os.Args[0])
@@ -31,6 +37,12 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if showVersion {
+		_, _ = fmt.Fprintln(flag.CommandLine.Output(), version.FromBuildInfo())
+
+		os.Exit(0)
+	}
 
 	args := flag.Args()
 	if len(args) == 0 {
