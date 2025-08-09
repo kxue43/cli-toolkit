@@ -139,7 +139,7 @@ func TestProjects(t *testing.T) {
 		err = cmd.Run()
 		require.NoError(t, err)
 
-		contents, err := os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github/workflows", "test-and-lint.yaml")))
+		contents, err := os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github", "workflows", "test-and-lint.yaml")))
 		require.NoError(t, err)
 
 		var workflow Workflow
@@ -148,7 +148,7 @@ func TestProjects(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
-		assert.Equal(t, githubVersion, workflow.Jobs["test-and-lint"].Steps[4].With["version"])
+		assert.Equal(t, githubVersion, workflow.Jobs["test-and-lint"].Steps[len(workflow.Jobs["test-and-lint"].Steps)-1].With["version"])
 
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 		require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestProjects(t *testing.T) {
 		var workflow Workflow
 
 		for _, file := range workflowFiles {
-			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github/workflows", file.name)))
+			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".github", "workflows", file.name)))
 			require.NoError(t, err)
 
 			err = yaml.Unmarshal(contents, &workflow)
@@ -296,10 +296,10 @@ func TestProjects(t *testing.T) {
 			"mypy.ini",
 			"poetry.toml",
 			"tartufo.toml",
-			"docs/_static/custom.css",
-			"docs/.air.toml",
-			"docs/Makefile",
-			"docs/README.md",
+			filepath.Join("docs", "_static", "custom.css"),
+			filepath.Join("docs", ".air.toml"),
+			filepath.Join("docs", "Makefile"),
+			filepath.Join("docs", "README.md"),
 		}
 		for _, name := range constantFiles {
 			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
@@ -311,7 +311,7 @@ func TestProjects(t *testing.T) {
 			assert.Equal(t, contents1, contents)
 		}
 
-		fd, err := os.Open(filepath.Clean(filepath.Join(tempDir, "docs/index.rst")))
+		fd, err := os.Open(filepath.Clean(filepath.Join(tempDir, "docs", "index.rst")))
 		require.NoError(t, err)
 
 		defer func(fd *os.File) { _ = fd.Close() }(fd)
@@ -320,7 +320,7 @@ func TestProjects(t *testing.T) {
 		scanner.Scan()
 		assert.Equal(t, cmd.ProjectName, scanner.Text())
 
-		fd, err = os.Open(filepath.Clean(filepath.Join(tempDir, "docs/conf.py")))
+		fd, err = os.Open(filepath.Clean(filepath.Join(tempDir, "docs", "conf.py")))
 		require.NoError(t, err)
 
 		defer func(fd *os.File) { _ = fd.Close() }(fd)
@@ -402,10 +402,10 @@ func TestProjects(t *testing.T) {
 			"eslint.config.js",
 			"tsconfig.json",
 			"vitest.config.ts",
-			"src/main.ts",
-			"test/setUp.ts",
-			"test/utils.ts",
-			"test/vitest.d.ts",
+			filepath.Join("src", "main.ts"),
+			filepath.Join("test", "setUp.ts"),
+			filepath.Join("test", "utils.ts"),
+			filepath.Join("test", "vitest.d.ts"),
 		}
 		for _, name := range constantFiles {
 			contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, name)))
