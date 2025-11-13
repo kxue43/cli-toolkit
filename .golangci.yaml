@@ -100,7 +100,7 @@ linters:
       - path: '^auth/cache\.go$'
         linters:
           - gosec
-        # crypto/sha1 is used for hashing, not encryption. 
+        # crypto/sha1 is used for hashing, not encryption.
         text: "weak cryptographic primitive"
       - path: '^cmd/toolkit-assume-role/main\.go$'
         linters:
@@ -114,10 +114,9 @@ linters:
         text: "G114: Use of net/http serve function that has no support for setting timeouts"
     paths:
       - adhoc/
-      - git2go/
 
 issues:
-  max-issues-per-linter: 0      
+  max-issues-per-linter: 0
   max-same-issues: 0
 formatters:
   enable:
@@ -129,7 +128,4 @@ formatters:
         - standard
         - default
         - localmodule
-  exclusions:
-    paths:
-      - git2go/
-    
+
