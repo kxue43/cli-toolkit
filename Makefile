@@ -1,7 +1,5 @@
 .DEFAULT_GOAL := all
 
-export PKG_CONFIG_PATH=$(CURDIR)/git2go/static-build/install/lib/pkgconfig
-
 test:
 	@go test ./...
 .PHONY: test
@@ -32,11 +30,3 @@ lint-all:
 
 all: test lint
 .PHONY: all
-
-toolkit-git-hook:
-	@go build -tags static ./cmd/toolkit-git-hook
-.PHONY: toolkit-git-hook
-
-try-run-hook: toolkit-git-hook
-	@./toolkit-git-hook
-.PHONY: test-run-hook
