@@ -291,13 +291,12 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	groups := make([]depsGroup, 4)
 
 	groups[0] = depsGroup{
-		name:        "develop",
+		name:        "linting",
 		highlighted: true,
 	}
 
-	groups[1] = depsGroup{name: "linting"}
-	groups[2] = depsGroup{name: "test"}
-	groups[3] = depsGroup{name: "docs"}
+	groups[1] = depsGroup{name: "test"}
+	groups[2] = depsGroup{name: "docs"}
 
 	var ti textinput.Model
 
@@ -329,10 +328,9 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	}
 
 	grouping := [][]int{
-		{0},
-		{1, 2, 3},
-		{4, 5, 6},
-		{7, 8},
+		{0, 1, 2},
+		{3, 4, 5},
+		{6},
 	}
 
 	for i, items := range grouping {

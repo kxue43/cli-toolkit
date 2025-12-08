@@ -1,12 +1,9 @@
 .DS_Store
-.python-version
 **/*.whl
 **/*.tar.gz
 /docs/node_modules
 /docs/_build
-/poetry.toml
 src/*.egg-info
 /adhoc*.py
 __pycache__
 /.coverage
-/poetry.toml

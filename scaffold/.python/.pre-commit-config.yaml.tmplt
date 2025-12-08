@@ -3,7 +3,6 @@ repos:
     rev: "{% .BlackVersion %}"
     hooks:
       - id: black
-        language_version: python{% .PythonVersion %}
 
   - repo: https://github.com/PyCQA/flake8
     rev: "{% .Flake8Version %}"
@@ -11,20 +10,19 @@ repos:
       - id: flake8
 
   - repo: https://github.com/kxue43/shell-cmd-on-change
-    rev: "1.2.0"
+    rev: "2.0.0"
     hooks:
       - id: shell-cmd-on-change
-        name: poetry-install
+        name: uv-sync
         args:
-          - "--paths"
-          - "poetry.lock"
-          - "--command"
-          - "poetry sync"
+          - "-Ppyproject.toml"
+          - "-Puv.lock"
+          - "uv sync"
         stages: [post-merge]
         always_run: true
         verbose: true
 
   - repo: https://github.com/godaddy/tartufo
-    rev: "{% .TartufoVersion %}"
+    rev: "{% .TartufoTag %}"
     hooks:
       - id: tartufo

@@ -6,8 +6,8 @@ on:
     paths:
       - "docs/**"
       - "src/**.py"
-      - "poetry.lock"
       - "pyproject.toml"
+      - "uv.lock"
 
   workflow_dispatch:
 
@@ -31,34 +31,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Get poetry from cache
-        id: poetry-cache
-        uses: actions/cache@v4
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          path: ${{ github.workspace }}/pipx/venvs/poetry/**
-          key: default-branch-poetry-cache
+          python-version-file: "pyproject.toml"
 
-      - name: Install poetry if cache misses
-        if: ${{ steps.poetry-cache.outputs.cache-hit != 'true' }}
-        run: PIPX_HOME=$GITHUB_WORKSPACE/pipx pipx install poetry
-
-      - name: Add poetry executable to PATH
-        run: echo "$GITHUB_WORKSPACE/pipx/venvs/poetry/bin" >> $GITHUB_PATH
-
-      - name: Set up Python and cache poetry install
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: '{% .PythonVersion %}'
-          cache: 'poetry'
+          enable-cache: true
 
-      - name: Install dependencies with poetry
-        run: poetry install
+      - name: Install the project
+        run: uv sync --locked
 
       - name: Make HTML
-        run: poetry run make clean && poetry run make html
-        working-directory: ./docs
+        run: uv run --directory=docs sphinx-build -M html . _build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
