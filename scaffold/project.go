@@ -23,29 +23,28 @@ import (
 
 type (
 	GoProjectCmd struct {
-		rootDir             string
-		ModulePath          string `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
-		GoVersion           string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
-		GolangcilintVersion string `name:"golangci-lint-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and GitHub Actions workflow."`
-		TartufoVersion      string `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
-		VersionSetters      []VersionSetter
-		TimeoutSeconds      int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		rootDir         string
+		ModulePath      string `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
+		GoVersion       string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
+		GolangcilintTag string `name:"golangci-lint-tag" default:"LATEST" help:"GitHub tag of golangci-lint."`
+		TartufoTag      string `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
+		VersionSetters  []VersionSetter
+		TimeoutSeconds  int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
 		rootDir           string
 		ProjectName       string        `arg:"" required:"" name:"ProjectName" help:"Python project name."`
 		Description       string        `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
-		BlackVersion      string        `name:"black-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and pyproject.toml."`
-		Flake8Version     string        `name:"flake8-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml and pyproject.toml."`
-		TartufoVersion    string        `name:"tartufo-version" default:"LATEST" help:"Will appear in .pre-commit-config.yaml."`
-		IPyKernelVersion  string        `name:"ipykernel-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		MypyVersion       string        `name:"mypy-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		PytestVersion     string        `name:"pytest-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		PytestMockVersion string        `name:"pytest-mock-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		SphinxVersion     string        `name:"sphinx-cov-version" default:"LATEST" help:"Will appear in pyproject.toml."`
-		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
+		BlackVersion      string        `name:"black-version" default:"LATEST" help:"Exact major.minor.bugfix version of black."`
+		Flake8Version     string        `name:"flake8-version" default:"LATEST" help:"Exact major.minor.bugfix version of flake8."`
+		TartufoTag        string        `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
+		MypyVersion       string        `name:"mypy-version" default:"LATEST" help:"Major and minor version of the format X.Y for mypy."`
+		PytestVersion     string        `name:"pytest-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest."`
+		PytestMockVersion string        `name:"pytest-mock-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-mock."`
+		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-cov."`
+		SphinxVersion     string        `name:"sphinx-version" default:"LATEST" help:"Major and minor version of the format X.Y for sphinx."`
+		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
 		VersionSetters    []VersionSetter
 		TimeoutSeconds    int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
@@ -87,10 +86,11 @@ type (
 	Registry byte
 
 	VersionSetter struct {
-		Indirect *string
-		Scope    string
-		Name     string
-		Registry Registry
+		Indirect       *string
+		Scope          string
+		Name           string
+		Registry       Registry
+		MajorMinorOnly bool
 	}
 
 	setterFunc func(context.Context) error
@@ -119,6 +119,8 @@ var (
 	pypiURLPrefix = "https://pypi.org/pypi"
 
 	tmpltExt = ".tmplt"
+
+	versionRegex = regexp.MustCompile(`^(?:v)?(\d+\.\d+)(?:\.\d+)?$`)
 )
 
 func (pv *PythonVersion) UnmarshalText(text []byte) error {
@@ -383,6 +385,15 @@ func (vs VersionSetter) Func(ctx context.Context) (err error) {
 		}
 	}
 
+	if vs.MajorMinorOnly {
+		m := versionRegex.FindStringSubmatch(*vs.Indirect)
+		if len(m) == 0 {
+			return fmt.Errorf("failed to extract major and minor versions from %q for package %s", *vs.Indirect, vs.Name)
+		}
+
+		*vs.Indirect = m[1]
+	}
+
 	return nil
 }
 
@@ -424,8 +435,8 @@ func setVersions(ctx context.Context, fns []setterFunc) error {
 
 func (c *GoProjectCmd) BeforeReset() error {
 	c.VersionSetters = []VersionSetter{
-		{Registry: GitHub, Scope: "golangci", Name: "golangci-lint", Indirect: &c.GolangcilintVersion},
-		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
+		{Registry: GitHub, Scope: "golangci", Name: "golangci-lint", Indirect: &c.GolangcilintTag},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoTag},
 	}
 
 	return nil
@@ -460,15 +471,14 @@ func (c *GoProjectCmd) Run() (err error) {
 
 func (c *PythonProjectCmd) BeforeReset() error {
 	c.VersionSetters = []VersionSetter{
-		{Registry: PyPI, Name: "ipykernel", Indirect: &c.IPyKernelVersion},
 		{Registry: GitHub, Scope: "psf", Name: "black", Indirect: &c.BlackVersion},
 		{Registry: PyPI, Name: "flake8", Indirect: &c.Flake8Version},
-		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion},
-		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion},
-		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion},
-		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion},
-		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion},
-		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
+		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion, MajorMinorOnly: true},
+		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion, MajorMinorOnly: true},
+		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion, MajorMinorOnly: true},
+		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion, MajorMinorOnly: true},
+		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion, MajorMinorOnly: true},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoTag},
 	}
 
 	return nil
