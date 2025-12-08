@@ -24,51 +24,51 @@ import (
 type (
 	GoProjectCmd struct {
 		rootDir         string
-		ModulePath      string `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
-		GoVersion       string `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
-		GolangcilintTag string `name:"golangci-lint-tag" default:"LATEST" help:"GitHub tag of golangci-lint."`
-		TartufoTag      string `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
-		VersionSetters  []VersionSetter
-		TimeoutSeconds  int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		ModulePath      string          `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
+		GoVersion       string          `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
+		GolangcilintTag string          `name:"golangci-lint-tag" default:"LATEST" help:"GitHub tag of golangci-lint."`
+		TartufoTag      string          `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
+		VersionSetters  []VersionSetter `kong:"-"`
+		TimeoutSeconds  int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
 		rootDir           string
-		ProjectName       string        `arg:"" required:"" name:"ProjectName" help:"Python project name."`
-		Description       string        `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
-		BlackVersion      string        `name:"black-version" default:"LATEST" help:"Exact major.minor.bugfix version of black."`
-		Flake8Version     string        `name:"flake8-version" default:"LATEST" help:"Exact major.minor.bugfix version of flake8."`
-		TartufoTag        string        `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
-		MypyVersion       string        `name:"mypy-version" default:"LATEST" help:"Major and minor version of the format X.Y for mypy."`
-		PytestVersion     string        `name:"pytest-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest."`
-		PytestMockVersion string        `name:"pytest-mock-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-mock."`
-		PytestCovVersion  string        `name:"pytest-cov-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-cov."`
-		SphinxVersion     string        `name:"sphinx-version" default:"LATEST" help:"Major and minor version of the format X.Y for sphinx."`
-		PythonVersion     PythonVersion `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
-		VersionSetters    []VersionSetter
-		TimeoutSeconds    int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		ProjectName       string          `arg:"" required:"" name:"ProjectName" help:"Python project name."`
+		Description       string          `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
+		BlackVersion      string          `name:"black-version" default:"LATEST" help:"Exact major.minor.bugfix version of black."`
+		Flake8Version     string          `name:"flake8-version" default:"LATEST" help:"Exact major.minor.bugfix version of flake8."`
+		TartufoTag        string          `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
+		MypyVersion       string          `name:"mypy-version" default:"LATEST" help:"Major and minor version of the format X.Y for mypy."`
+		PytestVersion     string          `name:"pytest-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest."`
+		PytestMockVersion string          `name:"pytest-mock-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-mock."`
+		PytestCovVersion  string          `name:"pytest-cov-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-cov."`
+		SphinxVersion     string          `name:"sphinx-version" default:"LATEST" help:"Major and minor version of the format X.Y for sphinx."`
+		PythonVersion     PythonVersion   `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
+		VersionSetters    []VersionSetter `kong:"-"`
+		TimeoutSeconds    int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	TsCdkProjectCmd struct {
 		rootDir                 string
-		ProjectName             string        `arg:"" required:"" name:"ProjectName" help:"TypeScript CDK project name."`
-		EslintVersion           string        `name:"eslint-version" default:"LATEST" help:"Will appear in package.json."`
-		EslintJsVersion         string        `name:"eslint-js-version" default:"LATEST" help:"Will appear in package.json."`
-		TypeScriptEslintVersion string        `name:"typescript-eslint-version" default:"LATEST" help:"Will appear in package.json."`
-		VitestVersion           string        `name:"vitest-version" default:"LATEST" help:"Will appear in package.json."`
-		VitestCoverageV8Version string        `name:"vitest-coverage-v8-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkCliVersion        string        `name:"aws-cdk-cli-version" default:"LATEST" help:"Will appear in package.json."`
-		EsbuildVersion          string        `name:"esbuild-version" default:"LATEST" help:"Will appear in package.json."`
-		PrettierVersion         string        `name:"prettier-version" default:"LATEST" help:"Will appear in package.json."`
-		TsxVersion              string        `name:"tsx-version" default:"LATEST" help:"Will appear in package.json."`
-		TypeScriptVersion       string        `name:"typescript-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkAssertVersion     string        `name:"aws-cdk-assert-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkLibVersion        string        `name:"aws-cdk-lib-version" default:"LATEST" help:"Will appear in package.json."`
-		ConstructsVersion       string        `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
-		YamlVersion             string        `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
-		NodejsVersion           NodejsVersion `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
-		VersionSetters          []VersionSetter
-		TimeoutSeconds          int `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		ProjectName             string          `arg:"" required:"" name:"ProjectName" help:"TypeScript CDK project name."`
+		EslintVersion           string          `name:"eslint-version" default:"LATEST" help:"Will appear in package.json."`
+		EslintJsVersion         string          `name:"eslint-js-version" default:"LATEST" help:"Will appear in package.json."`
+		TypeScriptEslintVersion string          `name:"typescript-eslint-version" default:"LATEST" help:"Will appear in package.json."`
+		VitestVersion           string          `name:"vitest-version" default:"LATEST" help:"Will appear in package.json."`
+		VitestCoverageV8Version string          `name:"vitest-coverage-v8-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkCliVersion        string          `name:"aws-cdk-cli-version" default:"LATEST" help:"Will appear in package.json."`
+		EsbuildVersion          string          `name:"esbuild-version" default:"LATEST" help:"Will appear in package.json."`
+		PrettierVersion         string          `name:"prettier-version" default:"LATEST" help:"Will appear in package.json."`
+		TsxVersion              string          `name:"tsx-version" default:"LATEST" help:"Will appear in package.json."`
+		TypeScriptVersion       string          `name:"typescript-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkAssertVersion     string          `name:"aws-cdk-assert-version" default:"LATEST" help:"Will appear in package.json."`
+		AwsCdkLibVersion        string          `name:"aws-cdk-lib-version" default:"LATEST" help:"Will appear in package.json."`
+		ConstructsVersion       string          `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
+		YamlVersion             string          `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
+		NodejsVersion           NodejsVersion   `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
+		VersionSetters          []VersionSetter `kong:"-"`
+		TimeoutSeconds          int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	WriteHook func(io.Writer) error

@@ -47,9 +47,7 @@ jobs:
         run: uv sync --locked
 
       - name: Make HTML
-        run: uv run make clean && uv run make html
-        env:
-          UV_WORKING_DIR: ./docs
+        run: uv run --directory=docs sphinx-build -M html . _build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
