@@ -27,6 +27,7 @@ type (
 	Cacher struct {
 		logger   *log.Logger
 		cacheDir string
+		cipher   Cipher
 	}
 
 	cacheFile struct {
@@ -58,11 +59,11 @@ func GetPrefix(s string) string {
 }
 
 func EncodeToFileName(roleArn string, ts time.Time) string {
-	return fmt.Sprintf("%s-%s.json", GetPrefix(roleArn), strconv.FormatInt(ts.Unix(), 10))
+	return fmt.Sprintf("%s-%s", GetPrefix(roleArn), strconv.FormatInt(ts.Unix(), 10))
 }
 
 func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
-	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)\.json$`, GetPrefix(roleArn)))
+	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)\$`, GetPrefix(roleArn)))
 
 	matches := regex.FindStringSubmatch(fileName)
 	if matches == nil {
@@ -79,7 +80,7 @@ func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 	return ts, nil
 }
 
-func NewCacher(logger *log.Logger) *Cacher {
+func NewCacher(logger *log.Logger, cipher Cipher) *Cacher {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		logger.Print("could not locate user home directory")
@@ -97,7 +98,7 @@ func NewCacher(logger *log.Logger) *Cacher {
 			return nil
 		}
 
-		return &Cacher{logger: logger, cacheDir: cacheDir}
+		return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}
 	} else if err != nil {
 		logger.Print(err.Error())
 
@@ -110,17 +111,13 @@ func NewCacher(logger *log.Logger) *Cacher {
 		return nil
 	}
 
-	return &Cacher{logger: logger, cacheDir: cacheDir}
+	return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}
 }
 
-// Save marshals output and saves it to a file whose name is generated according to roleArn and the current timestamp.
-// On success, it returns the binary contents saved to the file as a byte slice. On failure, if the returned
-// error wraps ErrInvalidCredential, the AWS credential is invalid. Otherwise only the write operation failed
-// but the AWS credential is valid.
 func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
 	ts, err := time.Parse(time.RFC3339, output.Expiration)
 	if err != nil {
-		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %w", ErrInvalidCredential, output.Expiration, err)
+		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %s", ErrInvalidCredential, output.Expiration, err.Error())
 	}
 
 	fileName := EncodeToFileName(roleArn, ts)
@@ -128,11 +125,16 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 
 	contents, err = json.Marshal(output)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to serialize CredentialProcessOutput: %w", ErrInvalidCredential, err)
+		return nil, fmt.Errorf("%w: failed to serialize CredentialProcessOutput: %s", ErrInvalidCredential, err.Error())
 	}
 
-	if err = os.WriteFile(filePath, contents, 0600); err != nil {
-		return contents, fmt.Errorf("failed to save credentials to cache file: %w", err)
+	encrypted, err := c.cipher.Encrypt(contents)
+	if err != nil {
+		return contents, fmt.Errorf("failed to encrypt cache file: %s", err.Error())
+	}
+
+	if err = os.WriteFile(filePath, encrypted, 0600); err != nil {
+		return contents, fmt.Errorf("failed to write to cache file: %s", err.Error())
 	}
 
 	return contents, nil
@@ -141,7 +143,7 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	max := time.Now().Add(time.Minute * 10)
 	actives := make(cacheFileSlice, 0)
-	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*.json`, GetPrefix(roleArn)))
+	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*`, GetPrefix(roleArn)))
 
 	cacheFiles, err := filepath.Glob(pattern)
 	if err != nil {
@@ -179,6 +181,13 @@ func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	contents, err = os.ReadFile(actives[0].filePath)
 	if err != nil {
 		c.logger.Printf("failed to read active cache file %q: %s\n", actives[0].filePath, err)
+
+		return nil
+	}
+
+	contents, err = c.cipher.Decrypt(contents)
+	if err != nil {
+		c.logger.Printf("failed to decrypt cache file %q: %s\n", actives[0].filePath, err)
 
 		return nil
 	}

@@ -88,7 +88,14 @@ func (a *AssumeRoleCmd) Init(ctx context.Context, tty io.ReadWriter) {
 
 	a.client = sts.NewFromConfig(cfg)
 
-	a.cacher = NewCacher(a.prompter.Logger)
+	cipher, err := NewCipher(fromKeyring)
+	if err != nil {
+		a.prompter.Printf("failed to create cache cipher, cache mode off: %s\n", err)
+
+		return
+	}
+
+	a.cacher = NewCacher(a.prompter.Logger, cipher)
 	if a.cacher == nil {
 		a.prompter.Printf("cache mode off: %s\n", err)
 	}
