@@ -38,7 +38,11 @@ type (
 	cacheFileSlice []*cacheFile
 )
 
-var ErrInvalidCredential = errors.New("invalid AWS credential")
+var (
+	ErrCacheInit         = errors.New("cache initialization failure")
+	ErrCacheSave         = errors.New("failed to save cache file")
+	ErrInvalidCredential = errors.New("invalid AWS credential")
+)
 
 func (cs cacheFileSlice) Len() int {
 	return len(cs)
@@ -80,12 +84,11 @@ func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 	return ts, nil
 }
 
-func NewCacher(logger *log.Logger, cipher Cipher) *Cacher {
+// Non-nil returned error wraps [ErrCacheInit].
+func NewCacher(logger *log.Logger, cipher Cipher) (*Cacher, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		logger.Print("could not locate user home directory")
-
-		return nil
+		return nil, fmt.Errorf("%w: could not locate user home directory", ErrCacheInit)
 	}
 
 	cacheDir := filepath.Join(home, ".aws", "toolkit-cache")
@@ -93,27 +96,22 @@ func NewCacher(logger *log.Logger, cipher Cipher) *Cacher {
 	info, err := os.Stat(cacheDir)
 	if os.IsNotExist(err) {
 		if err = os.MkdirAll(cacheDir, 0750); err != nil {
-			logger.Print("failed to create cache directory")
-
-			return nil
+			return nil, fmt.Errorf("%w: failed to create cache directory", ErrCacheInit)
 		}
 
-		return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}
+		return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}, nil
 	} else if err != nil {
-		logger.Print(err.Error())
-
-		return nil
+		return nil, fmt.Errorf("%w: failed to locate cache directory: %s", ErrCacheInit, err.Error())
 	}
 
 	if !info.IsDir() {
-		logger.Print("cache directory is already a file")
-
-		return nil
+		return nil, fmt.Errorf("%w: cache directory is already a file", ErrCacheInit)
 	}
 
-	return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}
+	return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}, nil
 }
 
+// Non-nil returned error wraps [ErrInvalidCredential] or [ErrCacheSave].
 func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
 	ts, err := time.Parse(time.RFC3339, output.Expiration)
 	if err != nil {
@@ -130,11 +128,11 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 
 	encrypted, err := c.cipher.Encrypt(contents)
 	if err != nil {
-		return contents, fmt.Errorf("failed to encrypt cache file: %s", err.Error())
+		return contents, fmt.Errorf("%w: failed to encrypt before saving: %s", ErrCacheSave, err.Error())
 	}
 
 	if err = os.WriteFile(filePath, encrypted, 0600); err != nil {
-		return contents, fmt.Errorf("failed to write to cache file: %s", err.Error())
+		return contents, fmt.Errorf("%w: failed to write to disk: %s", ErrCacheSave, err.Error())
 	}
 
 	return contents, nil

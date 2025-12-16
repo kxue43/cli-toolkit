@@ -4,7 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+
+	"github.com/aws/aws-sdk-go-v2/config"
 
 	"github.com/kxue43/cli-toolkit/auth"
 )
@@ -62,7 +65,25 @@ func main() {
 
 	ctx := context.Background()
 
-	cmd.Init(ctx, tty)
+	logger := log.New(tty, "toolkit-assume-role: ", 0)
 
-	cmd.Run(ctx, os.Stdout)
+	err = cmd.ValidateInputs(flag.Args())
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cmd.Profile), config.WithRegion(cmd.Region))
+	if err != nil {
+		logger.Fatalf("failed to load AWS SDK configuration: %s\n", err)
+	}
+
+	err = cmd.InitCache(tty, cfg)
+	if err != nil {
+		logger.Print(err.Error())
+	}
+
+	err = cmd.Run(ctx, os.Stdout)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
 }

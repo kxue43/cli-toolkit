@@ -112,6 +112,11 @@ linters:
           - gosec
         # local static files server doesn't need timeout
         text: "G114: Use of net/http serve function that has no support for setting timeouts"
+      - path: '^auth/command_test\.go$'
+        linters:
+          - gosec
+        # unit test only, and we know overflow doesn't happen
+        text: "G115: integer overflow conversion int64 -> int32"
     paths:
       - adhoc/
 
@@ -128,4 +133,3 @@ formatters:
         - standard
         - default
         - localmodule
-
