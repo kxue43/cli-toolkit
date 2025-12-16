@@ -24,8 +24,8 @@ type (
 		Version         int    `json:"Version"`
 	}
 
-	cacheSaveRetriever struct {
-		Logger   *log.Logger
+	Cacher struct {
+		logger   *log.Logger
 		cacheDir string
 	}
 
@@ -36,8 +36,6 @@ type (
 
 	cacheFileSlice []*cacheFile
 )
-
-const expirationLayout = time.RFC3339
 
 var ErrInvalidCredential = errors.New("invalid AWS credential")
 
@@ -81,10 +79,12 @@ func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 	return ts, nil
 }
 
-func NewCacheSaveRetriever(logger *log.Logger) (*cacheSaveRetriever, error) {
+func NewCacher(logger *log.Logger) *Cacher {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, errors.New("could not locate user home directory")
+		logger.Print("could not locate user home directory")
+
+		return nil
 	}
 
 	cacheDir := filepath.Join(home, ".aws", "toolkit-cache")
@@ -92,29 +92,35 @@ func NewCacheSaveRetriever(logger *log.Logger) (*cacheSaveRetriever, error) {
 	info, err := os.Stat(cacheDir)
 	if os.IsNotExist(err) {
 		if err = os.MkdirAll(cacheDir, 0750); err != nil {
-			return nil, errors.New("failed to create cache directory")
+			logger.Print("failed to create cache directory")
+
+			return nil
 		}
 
-		return &cacheSaveRetriever{Logger: logger, cacheDir: cacheDir}, nil
+		return &Cacher{logger: logger, cacheDir: cacheDir}
 	} else if err != nil {
-		return nil, err
+		logger.Print(err.Error())
+
+		return nil
 	}
 
 	if !info.IsDir() {
-		return nil, errors.New("cache directory is already a file")
+		logger.Print("cache directory is already a file")
+
+		return nil
 	}
 
-	return &cacheSaveRetriever{Logger: logger, cacheDir: cacheDir}, nil
+	return &Cacher{logger: logger, cacheDir: cacheDir}
 }
 
 // Save marshals output and saves it to a file whose name is generated according to roleArn and the current timestamp.
 // On success, it returns the binary contents saved to the file as a byte slice. On failure, if the returned
 // error wraps ErrInvalidCredential, the AWS credential is invalid. Otherwise only the write operation failed
 // but the AWS credential is valid.
-func (c *cacheSaveRetriever) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
-	ts, err := time.Parse(expirationLayout, output.Expiration)
+func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
+	ts, err := time.Parse(time.RFC3339, output.Expiration)
 	if err != nil {
-		return nil, fmt.Errorf("%w: Expiration %q is not of the right format: %w", ErrInvalidCredential, output.Expiration, err)
+		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %w", ErrInvalidCredential, output.Expiration, err)
 	}
 
 	fileName := EncodeToFileName(roleArn, ts)
@@ -132,14 +138,16 @@ func (c *cacheSaveRetriever) Save(roleArn string, output *CredentialProcessOutpu
 	return contents, nil
 }
 
-func (c *cacheSaveRetriever) Retrieve(roleArn string) (contents []byte, err error) {
+func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	max := time.Now().Add(time.Minute * 10)
 	actives := make(cacheFileSlice, 0)
 	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*.json`, GetPrefix(roleArn)))
 
 	cacheFiles, err := filepath.Glob(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("invalid file globbing pattern: %w", err)
+		c.logger.Printf("invalid file globbing pattern: %s\n", err)
+
+		return nil
 	}
 
 	var expiration time.Time
@@ -159,7 +167,7 @@ func (c *cacheSaveRetriever) Retrieve(roleArn string) (contents []byte, err erro
 	}
 
 	if len(actives) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	sort.Sort(actives)
@@ -170,14 +178,16 @@ func (c *cacheSaveRetriever) Retrieve(roleArn string) (contents []byte, err erro
 
 	contents, err = os.ReadFile(actives[0].filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read active cache file %q: %w", actives[0].filePath, err)
+		c.logger.Printf("failed to read active cache file %q: %s\n", actives[0].filePath, err)
+
+		return nil
 	}
 
-	return contents, nil
+	return contents
 }
 
-func (c *cacheSaveRetriever) deleteCacheFile(fullPath string, desc string) {
+func (c *Cacher) deleteCacheFile(fullPath string, desc string) {
 	if os.Remove(fullPath) != nil {
-		c.Logger.Printf("Failed to delete %s cache file %q.\n", desc, fullPath)
+		c.logger.Printf("Failed to delete %s cache file %q.\n", desc, fullPath)
 	}
 }

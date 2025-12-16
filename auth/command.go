@@ -1,8 +1,3 @@
-// Package auth supports performing the AWS CLI credential process. Field tags of the AssumeRoleCmd struct
-// are reserved for working with github.com/alecthomas/kong, but the tags are currently unused so that
-// the toolkit executable works cross-platform. The toolkit-assume-role executable performs the
-// AWS CLI credential process and only works on Linux and macOS because it needs to read from and
-// write to /dev/tty.
 package auth
 
 import (
@@ -10,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -23,24 +19,28 @@ import (
 
 type (
 	AssumeRoleCmd struct {
-		ci              ClientInteractor
-		cache           *cacheSaveRetriever
-		stsClient       *sts.Client
-		RoleArn         string `arg:"" required:"" name:"RoleArn" help:"ARN of the IAM role to assume."`
-		MFASerial       string `required:"" name:"mfa-serial" help:"ARN of the virtual MFA to use when assuming the role."`
-		Profile         string `required:"" name:"profile" help:"Source profile used for assuming the role."`
-		Region          string `name:"region" default:"us-east-1" help:"The regional STS service endpoint to call."`
-		RoleSessionName string `name:"role-session-name" default:"ToolkitCLI" help:"Role session name."`
-		DurationSeconds int32  `name:"duration-seconds" default:"3600" help:"Role session duration seconds."`
-		cacheModeOff    bool
+		prompter        *Prompter
+		cacher          *Cacher
+		client          *sts.Client
+		RoleArn         string
+		MFASerial       string
+		Profile         string
+		Region          string
+		RoleSessionName string
+		DurationSeconds int64
 	}
 
-	ClientInteractor struct {
+	Prompter struct {
+		*log.Logger
 		io.ReadWriter
 	}
 )
 
-func (c *ClientInteractor) PromptMFAToken() (code string, err error) {
+func NewPrompter(tty io.ReadWriter, prefix string, flag int) *Prompter {
+	return &Prompter{ReadWriter: tty, Logger: log.New(tty, prefix, flag)}
+}
+
+func (c *Prompter) MFAToken() (code string, err error) {
 	_, err = io.WriteString(c, "MFA code: ")
 	if err != nil {
 		return "", fmt.Errorf("failed to prompt for MFA code: %w", err)
@@ -56,54 +56,70 @@ func (c *ClientInteractor) PromptMFAToken() (code string, err error) {
 	return string(bytes.TrimSpace(buf[:n])), nil
 }
 
-func (c *ClientInteractor) NewLogger(prefix string, flag int) *log.Logger {
-	return log.New(c.ReadWriter, prefix, flag)
-}
-
-func (a *AssumeRoleCmd) AfterApply(fd io.ReadWriter) error {
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
-	if err != nil {
-		return fmt.Errorf("failed to load AWS CLI/SDK configuration: %w", err)
+func (a *AssumeRoleCmd) validate(args []string, logger *log.Logger) {
+	if a.MFASerial == "" {
+		logger.Fatal("-mfa-serial is required.")
 	}
 
-	a.stsClient = sts.NewFromConfig(cfg)
-
-	a.ci = ClientInteractor{fd}
-	logger := a.ci.NewLogger("toolkit: ", 0)
-
-	a.cache, err = NewCacheSaveRetriever(logger)
-	if err != nil {
-		a.cacheModeOff = true
-
-		logger.Printf("cache mode off: %s\n", err)
+	if a.Profile == "" {
+		logger.Fatal("-profile is required.")
 	}
 
-	return nil
+	if a.DurationSeconds > 14400 {
+		logger.Fatal("-duration-seconds cannot exceed 14400, i.e. 4 hours.")
+	}
+
+	if len(args) == 0 {
+		logger.Fatal("The <RoleArn> argument is required.")
+	}
+
+	a.RoleArn = args[0]
 }
 
-func (a *AssumeRoleCmd) Run(dest io.Writer) (err error) {
+func (a *AssumeRoleCmd) Init(ctx context.Context, tty io.ReadWriter) {
+	a.prompter = NewPrompter(tty, "toolkit-assume-role: ", 0)
+
+	a.validate(flag.Args(), a.prompter.Logger)
+
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(a.Profile), config.WithRegion(a.Region))
+	if err != nil {
+		a.prompter.Fatalf("failed to load AWS CLI/SDK configuration: %s\n", err)
+	}
+
+	a.client = sts.NewFromConfig(cfg)
+
+	a.cacher = NewCacher(a.prompter.Logger)
+	if a.cacher == nil {
+		a.prompter.Printf("cache mode off: %s\n", err)
+	}
+}
+
+func (a *AssumeRoleCmd) Run(ctx context.Context, dest io.Writer) {
+	var err error
+
 	// Output of the AWS CLI credential process.
 	var output []byte
 
-	if !a.cacheModeOff {
-		output, err = a.cache.Retrieve(a.RoleArn)
-		if err == nil && output != nil {
+	if a.cacher != nil {
+		output = a.cacher.Retrieve(a.RoleArn)
+		if output != nil {
 			_, err = dest.Write(output)
-
-			return err
+			if err != nil {
+				a.prompter.Fatalf("failed to write credentials to destination: %s\n", err)
+			}
 		}
 	}
 
-	provider := stscreds.NewAssumeRoleProvider(a.stsClient, a.RoleArn, func(o *stscreds.AssumeRoleOptions) {
+	provider := stscreds.NewAssumeRoleProvider(a.client, a.RoleArn, func(o *stscreds.AssumeRoleOptions) {
 		o.RoleSessionName = a.RoleSessionName
 		o.Duration = time.Second * time.Duration(a.DurationSeconds)
 		o.SerialNumber = aws.String(a.MFASerial)
-		o.TokenProvider = a.ci.PromptMFAToken
+		o.TokenProvider = a.prompter.MFAToken
 	})
 
-	stsCreds, err := provider.Retrieve(context.TODO())
+	stsCreds, err := provider.Retrieve(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve STS credentials: %w", err)
+		a.prompter.Fatalf("failed to retrieve STS credentials: %s\n", err)
 	}
 
 	// structured output
@@ -111,27 +127,33 @@ func (a *AssumeRoleCmd) Run(dest io.Writer) (err error) {
 		AccessKeyId:     stsCreds.AccessKeyID,
 		SecretAccessKey: stsCreds.SecretAccessKey,
 		SessionToken:    stsCreds.SessionToken,
-		Expiration:      stsCreds.Expires.Format(expirationLayout),
+		Expiration:      stsCreds.Expires.Format(time.RFC3339),
 		Version:         1,
 	}
 
-	if !a.cacheModeOff {
-		output, err = a.cache.Save(a.RoleArn, &soutput)
+	if a.cacher != nil {
+		output, err = a.cacher.Save(a.RoleArn, &soutput)
 		if errors.Is(err, ErrInvalidCredential) {
-			return err
+			a.prompter.Fatal(err.Error())
+		} else if err != nil {
+			a.prompter.Print(err.Error())
 		}
 
 		_, err = dest.Write(output)
+		if err != nil {
+			a.prompter.Fatalf("failed to write credentials to destination: %s\n", err)
+		}
 
-		return err
+		return
 	}
 
 	output, err = json.Marshal(&soutput)
 	if err != nil {
-		return fmt.Errorf("failed to marshal credential process output: %w", err)
+		a.prompter.Fatalf("failed to marshal credential process output: %s\n", err)
 	}
 
 	_, err = dest.Write(output)
-
-	return err
+	if err != nil {
+		a.prompter.Fatal(err.Error())
+	}
 }
