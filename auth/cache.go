@@ -118,13 +118,12 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %s", ErrInvalidCredential, output.Expiration, err.Error())
 	}
 
-	fileName := EncodeToFileName(roleArn, ts)
-	filePath := filepath.Join(c.cacheDir, fileName)
-
 	contents, err = json.Marshal(output)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to serialize CredentialProcessOutput: %s", ErrInvalidCredential, err.Error())
 	}
+
+	filePath := filepath.Join(c.cacheDir, EncodeToFileName(roleArn, ts))
 
 	encrypted, err := c.cipher.Encrypt(contents)
 	if err != nil {

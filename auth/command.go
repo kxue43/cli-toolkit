@@ -108,6 +108,8 @@ func (a *AssumeRoleCmd) Run(ctx context.Context, dest io.Writer) (err error) {
 			if err != nil {
 				return fmt.Errorf("failed to write credentials to destination: %s", err.Error())
 			}
+
+			return
 		}
 	}
 
