@@ -18,7 +18,6 @@ Various CLI programs that aid my own workflows.
   ```
 
 - `toolkit-show-md` takes a Markdown file, converts it to a GitHub style HTML and displays the HTML in user's default browser.
-  It's used by [kxue43/showmd-vim-plugin](https://github.com/kxue43/showmd-vim-plugin).
 
   ```bash
   go install github.com/kxue43/cli-toolkit/cmd/toolkit-show-md@latest
