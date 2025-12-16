@@ -67,7 +67,7 @@ func EncodeToFileName(roleArn string, ts time.Time) string {
 }
 
 func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
-	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)\$`, GetPrefix(roleArn)))
+	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)$`, GetPrefix(roleArn)))
 
 	matches := regex.FindStringSubmatch(fileName)
 	if matches == nil {
