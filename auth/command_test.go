@@ -75,9 +75,6 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 	defer func() { fromKeyring = keyringGet }()
 
-	tty := MockFileDescriptor{}
-	dest := MockFileDescriptor{}
-
 	hdm := HomeDirMocker{}
 
 	hdm.SetUp(t)
@@ -100,6 +97,15 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	expiration := time.Now()
 
 	duration := int32(cmd.DurationSeconds)
+
+	mockedTtyDevice := &MockFileDescriptor{}
+
+	_, err := mockedTtyDevice.r.WriteString(token + "\n")
+	require.NoError(t, err, "should be able to write token to mocked TTY file descriptor")
+
+	tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
+
+	dest := MockFileDescriptor{}
 
 	soutput := CredentialProcessOutput{
 		AccessKeyId:     "access-key-id",
@@ -131,9 +137,6 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 		Error: nil,
 	})
 
-	_, err := tty.r.WriteString(token + "\n")
-	require.NoError(t, err, "should be able to write token to mocked TTY file descriptor")
-
 	ctx := context.Background()
 
 	err = cmd.ValidateInputs([]string{roleArn})
@@ -145,7 +148,7 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
 	require.NoError(t, err, "should be able to load config using a mocked credentials provider")
 
-	err = cmd.InitCache(&tty, cfg)
+	err = cmd.Init(tty, cfg)
 	require.NoError(t, err, "should be able to init caching without error")
 
 	// Stub the STS client object.
