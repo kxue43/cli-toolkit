@@ -23,27 +23,26 @@ import (
 
 type (
 	GoProjectCmd struct {
-		rootDir         string
-		ModulePath      string          `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
-		GoVersion       string          `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
-		GolangcilintTag string          `name:"golangci-lint-tag" default:"LATEST" help:"GitHub tag of golangci-lint."`
-		TartufoTag      string          `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
-		VersionSetters  []VersionSetter `kong:"-"`
-		TimeoutSeconds  int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		rootDir             string
+		ModulePath          string          `arg:"" required:"" name:"ModulePath" help:"Module path for the project."`
+		GoVersion           string          `name:"go-version" default:"1.24.1" help:"Will appear in go.mod and GitHub Actions workflow."`
+		GolangcilintVersion SemVer          `name:"golangci-lint-version" default:"LATEST" help:"Version of golangci-lint, a pre-commit hook."`
+		TartufoVersion      SemVer          `name:"tartufo-version" default:"LATEST" help:"Version of tartufo, a pre-commit hook."`
+		VersionSetters      []VersionSetter `kong:"-"`
+		TimeoutSeconds      int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	PythonProjectCmd struct {
 		rootDir           string
 		ProjectName       string          `arg:"" required:"" name:"ProjectName" help:"Python project name."`
 		Description       string          `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
-		BlackVersion      string          `name:"black-version" default:"LATEST" help:"Exact major.minor.bugfix version of black."`
-		Flake8Version     string          `name:"flake8-version" default:"LATEST" help:"Exact major.minor.bugfix version of flake8."`
-		TartufoTag        string          `name:"tartufo-tag" default:"LATEST" help:"GitHub tag of tartufo."`
-		MypyVersion       string          `name:"mypy-version" default:"LATEST" help:"Major and minor version of the format X.Y for mypy."`
-		PytestVersion     string          `name:"pytest-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest."`
-		PytestMockVersion string          `name:"pytest-mock-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-mock."`
-		PytestCovVersion  string          `name:"pytest-cov-version" default:"LATEST" help:"Major and minor version of the format X.Y for pytest-cov."`
-		SphinxVersion     string          `name:"sphinx-version" default:"LATEST" help:"Major and minor version of the format X.Y for sphinx."`
+		TartufoVersion    SemVer          `name:"tartufo-version" default:"LATEST" help:"Version of tartufo, a pre-commit hook."`
+		RuffVersion       SemVer          `name:"ruff-version" default:"LATEST" help:"Version of ruff, a linting dependency."`
+		MypyVersion       SemVer          `name:"mypy-version" default:"LATEST" help:"Version of mypy, a linting dependency."`
+		PytestVersion     SemVer          `name:"pytest-version" default:"LATEST" help:"Version of pytest, a test dependency."`
+		PytestMockVersion SemVer          `name:"pytest-mock-version" default:"LATEST" help:"Version of pytest-mock, a test dependency."`
+		PytestCovVersion  SemVer          `name:"pytest-cov-version" default:"LATEST" help:"Version of pytest-cov, a test dependency."`
+		SphinxVersion     SemVer          `name:"sphinx-version" default:"LATEST" help:"Version of sphinx, a doc dependency."`
 		PythonVersion     PythonVersion   `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
 		VersionSetters    []VersionSetter `kong:"-"`
 		TimeoutSeconds    int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
@@ -52,20 +51,20 @@ type (
 	TsCdkProjectCmd struct {
 		rootDir                 string
 		ProjectName             string          `arg:"" required:"" name:"ProjectName" help:"TypeScript CDK project name."`
-		EslintVersion           string          `name:"eslint-version" default:"LATEST" help:"Will appear in package.json."`
-		EslintJsVersion         string          `name:"eslint-js-version" default:"LATEST" help:"Will appear in package.json."`
-		TypeScriptEslintVersion string          `name:"typescript-eslint-version" default:"LATEST" help:"Will appear in package.json."`
-		VitestVersion           string          `name:"vitest-version" default:"LATEST" help:"Will appear in package.json."`
-		VitestCoverageV8Version string          `name:"vitest-coverage-v8-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkCliVersion        string          `name:"aws-cdk-cli-version" default:"LATEST" help:"Will appear in package.json."`
-		EsbuildVersion          string          `name:"esbuild-version" default:"LATEST" help:"Will appear in package.json."`
-		PrettierVersion         string          `name:"prettier-version" default:"LATEST" help:"Will appear in package.json."`
-		TsxVersion              string          `name:"tsx-version" default:"LATEST" help:"Will appear in package.json."`
-		TypeScriptVersion       string          `name:"typescript-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkAssertVersion     string          `name:"aws-cdk-assert-version" default:"LATEST" help:"Will appear in package.json."`
-		AwsCdkLibVersion        string          `name:"aws-cdk-lib-version" default:"LATEST" help:"Will appear in package.json."`
-		ConstructsVersion       string          `name:"constructs-version" default:"LATEST" help:"Will appear in package.json."`
-		YamlVersion             string          `name:"yaml-version" default:"LATEST" help:"Will appear in package.json."`
+		EslintVersion           SemVer          `name:"eslint-version" default:"LATEST" help:"Version of eslint, a dev dependency."`
+		EslintJsVersion         SemVer          `name:"eslint-js-version" default:"LATEST" help:"Version of eslint-js, a dev dependency."`
+		TypeScriptEslintVersion SemVer          `name:"typescript-eslint-version" default:"LATEST" help:"Version of typescript-eslint, a dev dependency."`
+		VitestVersion           SemVer          `name:"vitest-version" default:"LATEST" help:"Version of vitest, a test dependency."`
+		VitestCoverageV8Version SemVer          `name:"vitest-coverage-v8-version" default:"LATEST" help:"Version of vitest-coverage, a test dependency."`
+		AwsCdkCliVersion        SemVer          `name:"aws-cdk-cli-version" default:"LATEST" help:"Version of the AWS CDK CLI."`
+		AwsCdkLibVersion        SemVer          `name:"aws-cdk-lib-version" default:"LATEST" help:"Version of the AWS CDK library."`
+		ConstructsVersion       SemVer          `name:"constructs-version" default:"LATEST" help:"Version of the constructs library."`
+		EsbuildVersion          SemVer          `name:"esbuild-version" default:"LATEST" help:"Version of esbuild, a dev dependency."`
+		PrettierVersion         SemVer          `name:"prettier-version" default:"LATEST" help:"Version of prettier, a dev dependency."`
+		TsxVersion              SemVer          `name:"tsx-version" default:"LATEST" help:"Version of tsx, a dev dependency."`
+		TypeScriptVersion       SemVer          `name:"typescript-version" default:"LATEST" help:"Version of typescript."`
+		AwsCdkAssertVersion     SemVer          `name:"aws-cdk-assert-version" default:"LATEST" help:"Version of aws-cdk-assert, a test dependency."`
+		YamlVersion             SemVer          `name:"yaml-version" default:"LATEST" help:"Version of yaml, a test dependency."`
 		NodejsVersion           NodejsVersion   `name:"nodejs-version" required:"" help:"Only accept major and minor version, i.e. the X.Y format."`
 		VersionSetters          []VersionSetter `kong:"-"`
 		TimeoutSeconds          int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
@@ -83,14 +82,20 @@ type (
 		Minor string
 	}
 
+	SemVer struct {
+		major  string
+		minor  string
+		bugfix string
+		set    bool
+	}
+
 	Registry byte
 
 	VersionSetter struct {
-		Indirect       *string
-		Scope          string
-		Name           string
-		Registry       Registry
-		MajorMinorOnly bool
+		Indirect *SemVer
+		Scope    string
+		Name     string
+		Registry Registry
 	}
 
 	setterFunc func(context.Context) error
@@ -120,7 +125,7 @@ var (
 
 	tmpltExt = ".tmplt"
 
-	versionRegex = regexp.MustCompile(`^(?:v)?(\d+\.\d+)(?:\.\d+)?$`)
+	semVerRegex = regexp.MustCompile(`^(\d+)\.(\d+)(\..+)?$`)
 )
 
 func (pv *PythonVersion) UnmarshalText(text []byte) error {
@@ -128,7 +133,7 @@ func (pv *PythonVersion) UnmarshalText(text []byte) error {
 
 	m := regex.FindStringSubmatch(string(text))
 	if len(m) == 0 {
-		return fmt.Errorf(`%s is not of the "3\.(\d+)" format`, string(text))
+		return fmt.Errorf(`%s is not of the %s format`, string(text), regex)
 	}
 
 	pv.Major = "3"
@@ -150,7 +155,7 @@ func (nv *NodejsVersion) UnmarshalText(text []byte) error {
 
 	m := regex.FindStringSubmatch(string(text))
 	if len(m) == 0 {
-		return fmt.Errorf(`%s is not of the "(\d+)\.(\d+)" format`, string(text))
+		return fmt.Errorf(`%s is not of the %s format`, string(text), regex)
 	}
 
 	nv.Major = m[1]
@@ -161,6 +166,47 @@ func (nv *NodejsVersion) UnmarshalText(text []byte) error {
 
 func (nv *NodejsVersion) String() string {
 	return nv.Major + "." + nv.Minor
+}
+
+func (sv *SemVer) String() string {
+	return fmt.Sprintf("%s.%s.%s", sv.major, sv.minor, sv.bugfix)
+}
+
+func (sv *SemVer) MajorMinor() string {
+	return fmt.Sprintf("%s.%s", sv.major, sv.minor)
+}
+
+func (sv *SemVer) UnmarshalText(text []byte) error {
+	if strings.EqualFold(string(text), "LATEST") {
+		return nil
+	}
+
+	m := semVerRegex.FindStringSubmatch(string(text))
+	if len(m) == 0 {
+		return fmt.Errorf(`%s is not of the %s format`, string(text), semVerRegex)
+	}
+
+	sv.major = m[1]
+	sv.minor = m[2]
+	sv.bugfix = "0"
+
+	if m[3] != "" {
+		sv.bugfix = strings.TrimPrefix(m[3], ".")
+	}
+
+	sv.set = true
+
+	return nil
+}
+
+func (sv *SemVer) SetFromString(raw string) error {
+	raw = strings.TrimPrefix(raw, "v")
+
+	return sv.UnmarshalText([]byte(raw))
+}
+
+func (sv *SemVer) Set() bool {
+	return sv.set
 }
 
 func ToModFile(modulePath, goVersion string) WriteHook {
@@ -367,31 +413,29 @@ func writeFiles(dest string, srcFS embed.FS, srcPrefix string, data any) (err er
 }
 
 func (vs VersionSetter) Func(ctx context.Context) (err error) {
+	var rawSpecifier string
+
 	switch vs.Registry {
 	case GitHub:
-		*vs.Indirect, err = GitHubProjectLatestReleaseTag(ctx, vs.Scope, vs.Name)
+		rawSpecifier, err = GitHubProjectLatestReleaseTag(ctx, vs.Scope, vs.Name)
 		if err != nil {
-			return fmt.Errorf("failed to fetch the latest version of %s/%s from GitHub: %w", vs.Scope, vs.Name, err)
+			return fmt.Errorf("failed to fetch the latest tag of %s/%s from GitHub: %w", vs.Scope, vs.Name, err)
 		}
 	case PyPI:
-		*vs.Indirect, err = PyPIPackageLatestVersion(ctx, vs.Name)
+		rawSpecifier, err = PyPIPackageLatestVersion(ctx, vs.Name)
 		if err != nil {
 			return fmt.Errorf("failed to fetch the latest version of %s from PyPI: %w", vs.Name, err)
 		}
 	case NPM:
-		*vs.Indirect, err = NPMPackageLatestVersion(ctx, vs.Name)
+		rawSpecifier, err = NPMPackageLatestVersion(ctx, vs.Name)
 		if err != nil {
 			return fmt.Errorf("failed to fetch the latest version of %s from NPM: %w", vs.Name, err)
 		}
 	}
 
-	if vs.MajorMinorOnly {
-		m := versionRegex.FindStringSubmatch(*vs.Indirect)
-		if len(m) == 0 {
-			return fmt.Errorf("failed to extract major and minor versions from %q for package %s", *vs.Indirect, vs.Name)
-		}
-
-		*vs.Indirect = m[1]
+	err = vs.Indirect.SetFromString(rawSpecifier)
+	if err != nil {
+		return fmt.Errorf("failed to parse %q as a semantic version specifier: %s", rawSpecifier, err.Error())
 	}
 
 	return nil
@@ -401,7 +445,7 @@ func getSetterFuncs(vss []VersionSetter) []setterFunc {
 	setterFuncs := make([]setterFunc, 0, len(vss))
 
 	for i := range vss {
-		if *vss[i].Indirect == "LATEST" {
+		if !vss[i].Indirect.Set() {
 			setterFuncs = append(setterFuncs, vss[i].Func)
 		}
 	}
@@ -435,8 +479,8 @@ func setVersions(ctx context.Context, fns []setterFunc) error {
 
 func (c *GoProjectCmd) BeforeReset() error {
 	c.VersionSetters = []VersionSetter{
-		{Registry: GitHub, Scope: "golangci", Name: "golangci-lint", Indirect: &c.GolangcilintTag},
-		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoTag},
+		{Registry: GitHub, Scope: "golangci", Name: "golangci-lint", Indirect: &c.GolangcilintVersion},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
 	}
 
 	return nil
@@ -471,14 +515,13 @@ func (c *GoProjectCmd) Run() (err error) {
 
 func (c *PythonProjectCmd) BeforeReset() error {
 	c.VersionSetters = []VersionSetter{
-		{Registry: GitHub, Scope: "psf", Name: "black", Indirect: &c.BlackVersion},
-		{Registry: PyPI, Name: "flake8", Indirect: &c.Flake8Version},
-		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion, MajorMinorOnly: true},
-		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion, MajorMinorOnly: true},
-		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion, MajorMinorOnly: true},
-		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion, MajorMinorOnly: true},
-		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion, MajorMinorOnly: true},
-		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoTag},
+		{Registry: PyPI, Name: "ruff", Indirect: &c.RuffVersion},
+		{Registry: PyPI, Name: "mypy", Indirect: &c.MypyVersion},
+		{Registry: PyPI, Name: "pytest", Indirect: &c.PytestVersion},
+		{Registry: PyPI, Name: "pytest-mock", Indirect: &c.PytestMockVersion},
+		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion},
+		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion},
+		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
 	}
 
 	return nil

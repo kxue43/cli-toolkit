@@ -1,13 +1,9 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: "{% .BlackVersion %}"
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v{% .RuffVersion %}
     hooks:
-      - id: black
-
-  - repo: https://github.com/PyCQA/flake8
-    rev: "{% .Flake8Version %}"
-    hooks:
-      - id: flake8
+      - id: ruff-check
+      - id: ruff-format
 
   - repo: https://github.com/kxue43/shell-cmd-on-change
     rev: "2.0.0"
@@ -23,6 +19,6 @@ repos:
         verbose: true
 
   - repo: https://github.com/godaddy/tartufo
-    rev: "{% .TartufoTag %}"
+    rev: v{% .TartufoVersion %}
     hooks:
       - id: tartufo
