@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,8 +15,14 @@ import (
 )
 
 type (
+	Logger interface {
+		Printf(string, ...any)
+		Print(...any)
+	}
+
 	AssumeRoleCmd struct {
-		prompter        *Prompter
+		logger          Logger
+		prompter        Prompter
 		cacher          *Cacher
 		client          *sts.Client
 		RoleArn         string
@@ -29,7 +34,6 @@ type (
 	}
 
 	Prompter struct {
-		*log.Logger
 		io.ReadWriter
 	}
 )
@@ -38,11 +42,7 @@ var (
 	ErrInvalidInput = errors.New("invalid CLI input")
 )
 
-func NewPrompter(tty io.ReadWriter, prefix string, flag int) *Prompter {
-	return &Prompter{ReadWriter: tty, Logger: log.New(tty, prefix, flag)}
-}
-
-func (c *Prompter) MFAToken() (code string, err error) {
+func (c Prompter) MFAToken() (code string, err error) {
 	_, err = io.WriteString(c, "MFA code: ")
 	if err != nil {
 		return "", fmt.Errorf("failed to prompt for MFA code: %w", err)
@@ -82,8 +82,10 @@ func (a *AssumeRoleCmd) ValidateInputs(args []string) error {
 }
 
 // Non-nil returned error wraps [ErrCacheInit].
-func (a *AssumeRoleCmd) InitCache(tty io.ReadWriter, cfg aws.Config) error {
-	a.prompter = NewPrompter(tty, "toolkit-assume-role: ", 0)
+func (a *AssumeRoleCmd) Init(tty *TTY, cfg aws.Config) error {
+	a.prompter = Prompter{ReadWriter: tty}
+
+	a.logger = tty
 
 	a.client = sts.NewFromConfig(cfg)
 
@@ -92,11 +94,12 @@ func (a *AssumeRoleCmd) InitCache(tty io.ReadWriter, cfg aws.Config) error {
 		return fmt.Errorf("%w: failed to create cache cipher: %s", ErrCacheInit, err.Error())
 	}
 
-	a.cacher, err = NewCacher(a.prompter.Logger, cipher)
+	a.cacher, err = NewCacher(a.logger, cipher)
 
 	return err
 }
 
+// Non-nil returned error means failure.
 func (a *AssumeRoleCmd) Run(ctx context.Context, dest io.Writer) (err error) {
 	// Output of the AWS CLI credential process.
 	var output []byte
@@ -139,7 +142,7 @@ func (a *AssumeRoleCmd) Run(ctx context.Context, dest io.Writer) (err error) {
 		if errors.Is(err, ErrInvalidCredential) {
 			return err
 		} else if err != nil {
-			a.prompter.Print(err.Error())
+			a.logger.Print(err.Error())
 		}
 
 		_, err = dest.Write(output)

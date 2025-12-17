@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +24,7 @@ type (
 	}
 
 	Cacher struct {
-		logger   *log.Logger
+		logger   Logger
 		cacheDir string
 		cipher   Cipher
 	}
@@ -85,7 +84,7 @@ func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 }
 
 // Non-nil returned error wraps [ErrCacheInit].
-func NewCacher(logger *log.Logger, cipher Cipher) (*Cacher, error) {
+func NewCacher(logger Logger, cipher Cipher) (*Cacher, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not locate user home directory", ErrCacheInit)
