@@ -27,27 +27,22 @@ default-groups = [
 
 [dependency-groups]
 linting = [
-    "black=={% .BlackVersion %}",  # This version must be the same as in `./.pre-commit-config.yaml`.
-    "flake8=={% .Flake8Version %}", # This version must be the same as in `./.pre-commit-config.yaml`.
-    "mypy~={% .MypyVersion %}",
+    "ruff~={% .RuffVersion.MajorMinor %}",
+    "mypy~={% .MypyVersion.MajorMinor %}",
 ]
 
 test = [
-    "pytest~={% .PytestVersion %}",
-    "pytest-mock~={% .PytestMockVersion %}",
-    "pytest-cov~={% .PytestCovVersion %}",
+    "pytest~={% .PytestVersion.MajorMinor %}",
+    "pytest-mock~={% .PytestMockVersion.MajorMinor %}",
+    "pytest-cov~={% .PytestCovVersion.MajorMinor %}",
 ]
 
 docs = [
-    "sphinx~={% .SphinxVersion %}",
+    "sphinx~={% .SphinxVersion.MajorMinor %}",
     "sphinx-rtd-theme",
     "sphinx-autodoc-typehints",
     "sphinx-copybutton",
 ]
-
-[tool.black]
-line-length = 88
-target-version = ["py{% .PythonVersion.NumsOnly %}"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

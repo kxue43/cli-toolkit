@@ -52,9 +52,6 @@ type (
 			SetupTools struct {
 				PackageData map[string][]string `toml:"package-data"`
 			} `toml:"setuptools"`
-			Black struct {
-				TargetVersion []string `toml:"target-version"`
-			} `toml:"black"`
 		} `toml:"tool"`
 
 		DepGroups struct {
@@ -75,11 +72,11 @@ type (
 )
 
 func TestProjects(t *testing.T) {
-	handlerFactory := func(tmplt, version string) http.Handler {
+	handlerFactory := func(tmplt, specifier string) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Helper()
 
-			body := fmt.Sprintf(tmplt, version)
+			body := fmt.Sprintf(tmplt, specifier)
 
 			_, err := w.Write([]byte(body))
 			require.NoError(t, err)
@@ -88,12 +85,11 @@ func TestProjects(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	githubVersion := "v1.2.3"
+	githubTag := "v1.2.3"
 	pypiVersion := "4.5.6"
 	npmVersion := "7.8.9"
-	mypyVersion := "1.1"
 
-	mux.Handle("GET /{owner}/{repo}/releases/latest", handlerFactory(`{"tag_name": %q}`, githubVersion))
+	mux.Handle("GET /{owner}/{repo}/releases/latest", handlerFactory(`{"tag_name": %q}`, githubTag))
 	mux.Handle("GET /{name}/json", handlerFactory(`{"info": {"version": %q}}`, pypiVersion))
 
 	npmHandler := handlerFactory(`{"dist-tags": {"latest": %q}}`, npmVersion)
@@ -104,7 +100,6 @@ func TestProjects(t *testing.T) {
 	mux.Handle("GET /@aws-cdk/assert", npmHandler)
 
 	ts := httptest.NewServer(mux)
-
 	defer ts.Close()
 
 	t.Run("GoProject", func(t *testing.T) {
@@ -119,11 +114,11 @@ func TestProjects(t *testing.T) {
 		defer func() { githubAPIURLPrefix = original }()
 
 		cmd := GoProjectCmd{
-			ModulePath:      "module-path",
-			GoVersion:       "1.24.5",
-			GolangcilintTag: "LATEST",
-			TartufoTag:      "LATEST",
-			TimeoutSeconds:  5,
+			ModulePath:          "module-path",
+			GoVersion:           "1.24.5",
+			GolangcilintVersion: SemVer{},
+			TartufoVersion:      SemVer{},
+			TimeoutSeconds:      5,
 		}
 
 		err = cmd.BeforeReset()
@@ -146,7 +141,7 @@ func TestProjects(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
-		assert.Equal(t, githubVersion, workflow.Jobs["test-and-lint"].Steps[len(workflow.Jobs["test-and-lint"].Steps)-1].With["version"])
+		assert.Equal(t, githubTag, workflow.Jobs["test-and-lint"].Steps[len(workflow.Jobs["test-and-lint"].Steps)-1].With["version"])
 
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 		require.NoError(t, err)
@@ -156,8 +151,8 @@ func TestProjects(t *testing.T) {
 		err = yaml.Unmarshal(contents, &preCommitConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, githubVersion, preCommitConfig.Repos[0].Rev)
-		assert.Equal(t, githubVersion, preCommitConfig.Repos[1].Rev)
+		assert.Equal(t, githubTag, preCommitConfig.Repos[0].Rev)
+		assert.Equal(t, githubTag, preCommitConfig.Repos[1].Rev)
 
 		for _, hook := range preCommitConfig.Repos[0].Hooks {
 			assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
@@ -198,17 +193,24 @@ func TestProjects(t *testing.T) {
 		assert.Equal(t, "3", pythonVersion.Major)
 		assert.Equal(t, "12", pythonVersion.Minor)
 
+		mypyVersion := SemVer{}
+		err = mypyVersion.UnmarshalText([]byte("1.2"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "1", mypyVersion.major)
+		assert.Equal(t, "2", mypyVersion.minor)
+		assert.Equal(t, "0", mypyVersion.bugfix)
+		assert.True(t, mypyVersion.Set())
+
 		cmd := PythonProjectCmd{
 			ProjectName:       "fs-walk",
 			Description:       "description",
-			BlackVersion:      "LATEST",
-			Flake8Version:     "LATEST",
-			TartufoTag:        "LATEST",
+			TartufoVersion:    SemVer{},
 			MypyVersion:       mypyVersion,
-			PytestVersion:     "LATEST",
-			PytestMockVersion: "LATEST",
-			PytestCovVersion:  "LATEST",
-			SphinxVersion:     "LATEST",
+			PytestVersion:     SemVer{},
+			PytestMockVersion: SemVer{},
+			PytestCovVersion:  SemVer{},
+			SphinxVersion:     SemVer{},
 			PythonVersion:     pythonVersion,
 			TimeoutSeconds:    5,
 		}
@@ -234,9 +236,8 @@ func TestProjects(t *testing.T) {
 		err = yaml.Unmarshal(contents, &preCommitConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, githubVersion, preCommitConfig.Repos[0].Rev)
-		assert.Equal(t, pypiVersion, preCommitConfig.Repos[1].Rev)
-		assert.Equal(t, githubVersion, preCommitConfig.Repos[3].Rev)
+		assert.Equal(t, "v"+pypiVersion, preCommitConfig.Repos[0].Rev, "the ruff-pre-commit repo should have the right rev field")
+		assert.Equal(t, githubTag, preCommitConfig.Repos[2].Rev, "the tartufo repo should have the right rev field")
 
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, "pyproject.toml")))
 		require.NoError(t, err)
@@ -251,28 +252,23 @@ func TestProjects(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("~=%s.0", cmd.PythonVersion.String()), pyProjectToml.Project.RequiresPython)
 		assert.Equal(t, "py.typed", pyProjectToml.Tool.SetupTools.PackageData[dashLower(cmd.ProjectName)][0])
 
-		assert.True(t, strings.HasPrefix(pyProjectToml.DepGroups.Linting[0], "black=="))
-		assert.Equal(t, githubVersion, strings.TrimPrefix(pyProjectToml.DepGroups.Linting[0], "black=="))
+		assert.Equal(t, mypyVersion.MajorMinor(), strings.TrimPrefix(pyProjectToml.DepGroups.Linting[1], "mypy~="))
 
-		assert.True(t, strings.HasPrefix(pyProjectToml.DepGroups.Linting[1], "flake8=="))
-		assert.Equal(t, pypiVersion, strings.TrimPrefix(pyProjectToml.DepGroups.Linting[1], "flake8=="))
+		pypiSemVer := &SemVer{}
+		err = pypiSemVer.SetFromString(pypiVersion)
+		require.NoError(t, err)
 
-		assert.Equal(t, mypyVersion, strings.TrimPrefix(pyProjectToml.DepGroups.Linting[2], "mypy~="))
+		expected := pypiSemVer.MajorMinor()
 
-		expected := strings.TrimSuffix(pypiVersion, ".6")
-
+		assert.Equal(t, expected, strings.TrimPrefix(pyProjectToml.DepGroups.Linting[0], "ruff~="))
 		assert.Equal(t, expected, strings.TrimPrefix(pyProjectToml.DepGroups.Test[0], "pytest~="))
 		assert.Equal(t, expected, strings.TrimPrefix(pyProjectToml.DepGroups.Test[1], "pytest-mock~="))
 		assert.Equal(t, expected, strings.TrimPrefix(pyProjectToml.DepGroups.Test[2], "pytest-cov~="))
-
 		assert.Equal(t, expected, strings.TrimPrefix(pyProjectToml.DepGroups.Docs[0], "sphinx~="))
-
-		assert.Equal(t, "py"+cmd.PythonVersion.NumsOnly(), pyProjectToml.Tool.Black.TargetVersion[0])
 
 		var contents1 []byte
 
 		constantFiles := []string{
-			".flake8",
 			".gitignore",
 			"mypy.ini",
 			"tartufo.toml",
@@ -341,20 +337,20 @@ func TestProjects(t *testing.T) {
 
 		cmd := TsCdkProjectCmd{
 			ProjectName:             "adhoc",
-			EslintVersion:           "LATEST",
-			EslintJsVersion:         "LATEST",
-			TypeScriptEslintVersion: "LATEST",
-			VitestVersion:           "LATEST",
-			VitestCoverageV8Version: "LATEST",
-			AwsCdkCliVersion:        "LATEST",
-			EsbuildVersion:          "LATEST",
-			PrettierVersion:         "LATEST",
-			TsxVersion:              "LATEST",
-			TypeScriptVersion:       "LATEST",
-			AwsCdkAssertVersion:     "LATEST",
-			AwsCdkLibVersion:        "LATEST",
-			ConstructsVersion:       "LATEST",
-			YamlVersion:             "LATEST",
+			EslintVersion:           SemVer{},
+			EslintJsVersion:         SemVer{},
+			TypeScriptEslintVersion: SemVer{},
+			VitestVersion:           SemVer{},
+			VitestCoverageV8Version: SemVer{},
+			AwsCdkCliVersion:        SemVer{},
+			EsbuildVersion:          SemVer{},
+			PrettierVersion:         SemVer{},
+			TsxVersion:              SemVer{},
+			TypeScriptVersion:       SemVer{},
+			AwsCdkAssertVersion:     SemVer{},
+			AwsCdkLibVersion:        SemVer{},
+			ConstructsVersion:       SemVer{},
+			YamlVersion:             SemVer{},
 			NodejsVersion:           nodejsVersion,
 			TimeoutSeconds:          5,
 		}

@@ -304,7 +304,7 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	depItems := make([]depItem, len(vss))
 
 	for i := range vss {
-		*vss[i].Indirect = "LATEST"
+		vss[i].Indirect = &scaffold.SemVer{}
 
 		ti = textinput.New()
 		ti.Placeholder = "LATEST"
