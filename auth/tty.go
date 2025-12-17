@@ -12,7 +12,7 @@ type (
 		dest   io.ReadWriter
 		logger *log.Logger
 		buf    bytes.Buffer
-		mux    sync.Mutex
+		mux    sync.Mutex // Guards the whole struct
 	}
 )
 

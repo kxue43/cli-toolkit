@@ -136,6 +136,8 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 	return contents, nil
 }
 
+// Retrieve tries to retrieve AWS credentials from cache files.
+// It succeeded if and only if the returned byte slice is not nil.
 func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	max := time.Now().Add(time.Minute * 10)
 	actives := make(cacheFileSlice, 0)
