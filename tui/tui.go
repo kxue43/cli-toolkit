@@ -301,11 +301,9 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	var ti textinput.Model
 
 	vss := cmd.VersionSetters
-	depItems := make([]depItem, len(vss))
+	depItems := make([]depItem, len(vss)-1) // The last versionSetter tartufo is not a depItem.
 
-	for i := range vss {
-		vss[i].Indirect = &scaffold.SemVer{}
-
+	for i := range depItems {
 		ti = textinput.New()
 		ti.Placeholder = "LATEST"
 		ti.CharLimit = 128
@@ -328,9 +326,9 @@ func InitialPythonModel(cmd *scaffold.PythonProjectCmd) pythonDeps {
 	}
 
 	grouping := [][]int{
-		{0, 1, 2},
-		{3, 4, 5},
-		{6},
+		{0, 1},
+		{2, 3, 4},
+		{5},
 	}
 
 	for i, items := range grouping {
