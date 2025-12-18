@@ -86,9 +86,6 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 	var duration int32 = 3600
 
-	stubber := testtools.NewStubber()
-	defer testtools.ExitTest(stubber, t)
-
 	t.Run("Happy path no cache", func(t *testing.T) {
 		// Create an AssumeRoleCmd with some fields already filled with valid values.
 		// We don't test CLI parsing in unit tests.
@@ -118,6 +115,9 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 			Expiration:      expiration.Format(time.RFC3339),
 			Version:         1,
 		}
+
+		stubber := testtools.NewStubber()
+		defer testtools.ExitTest(stubber, t)
 
 		stubber.Add(testtools.Stub{
 			OperationName: "AssumeRole",
