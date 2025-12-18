@@ -64,13 +64,13 @@ func (m *HomeDirMocker) TearDown(t *testing.T) {
 }
 
 func TestAssumeRoleCmdRun(t *testing.T) {
+	aesKey, _, err := generateKey(keySize)
+	require.NoError(t, err, "should be able to generate a random encryption key")
+
 	fromKeyring = func() ([]byte, error) {
 		t.Helper()
 
-		key, _, err := generateKey(keySize)
-		require.NoError(t, err, "should be able to generate a random encryption key")
-
-		return key, nil
+		return aesKey, nil
 	}
 
 	defer func() { fromKeyring = keyringGet }()
@@ -80,110 +80,182 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	hdm.SetUp(t)
 	defer hdm.TearDown(t)
 
-	// Create an AssumeRoleCmd with some fields already filled with valid values.
-	// We don't test CLI parsing in unit tests.
-	cmd := AssumeRoleCmd{
-		MFASerial:       "mfa-serial",
-		Profile:         "profile",
-		Region:          "us-east-1",
-		RoleSessionName: "ToolkitCLI",
-		DurationSeconds: 3600,
-	}
-
 	roleArn := "role-arn"
 
-	token := "123456"
+	expiration := time.Now().Add(10 * time.Hour)
 
-	expiration := time.Now()
-
-	duration := int32(cmd.DurationSeconds)
-
-	mockedTtyDevice := &MockFileDescriptor{}
-
-	_, err := mockedTtyDevice.r.WriteString(token + "\n")
-	require.NoError(t, err, "should be able to write token to mocked TTY file descriptor")
-
-	tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
-
-	dest := MockFileDescriptor{}
-
-	soutput := CredentialProcessOutput{
-		AccessKeyId:     "access-key-id",
-		SecretAccessKey: "secret-access-key",
-		SessionToken:    "session-token",
-		Expiration:      expiration.Format(time.RFC3339),
-		Version:         1,
-	}
+	var duration int32 = 3600
 
 	stubber := testtools.NewStubber()
+	defer testtools.ExitTest(stubber, t)
 
-	stubber.Add(testtools.Stub{
-		OperationName: "AssumeRole",
-		Input: &sts.AssumeRoleInput{
-			DurationSeconds: &duration,
-			RoleArn:         &roleArn,
-			RoleSessionName: &cmd.RoleSessionName,
-			SerialNumber:    &cmd.MFASerial,
-			TokenCode:       &token,
-		},
-		Output: &sts.AssumeRoleOutput{
-			Credentials: &types.Credentials{
-				AccessKeyId:     &soutput.AccessKeyId,
-				SecretAccessKey: &soutput.SecretAccessKey,
-				SessionToken:    &soutput.SessionToken,
-				Expiration:      &expiration,
+	t.Run("Happy path no cache", func(t *testing.T) {
+		// Create an AssumeRoleCmd with some fields already filled with valid values.
+		// We don't test CLI parsing in unit tests.
+		cmd := AssumeRoleCmd{
+			MFASerial:       "mfa-serial",
+			Profile:         "profile",
+			Region:          "us-east-1",
+			RoleSessionName: "ToolkitCLI",
+			DurationSeconds: int64(duration),
+		}
+
+		token := "123456"
+
+		mockedTtyDevice := &MockFileDescriptor{}
+
+		_, err := mockedTtyDevice.r.WriteString(token + "\n")
+		require.NoError(t, err, "should be able to write token to mocked TTY file descriptor")
+
+		tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
+
+		dest := MockFileDescriptor{}
+
+		soutput := CredentialProcessOutput{
+			AccessKeyId:     "access-key-id",
+			SecretAccessKey: "secret-access-key",
+			SessionToken:    "session-token",
+			Expiration:      expiration.Format(time.RFC3339),
+			Version:         1,
+		}
+
+		stubber.Add(testtools.Stub{
+			OperationName: "AssumeRole",
+			Input: &sts.AssumeRoleInput{
+				DurationSeconds: &duration,
+				RoleArn:         &roleArn,
+				RoleSessionName: &cmd.RoleSessionName,
+				SerialNumber:    &cmd.MFASerial,
+				TokenCode:       &token,
 			},
-		},
-		Error: nil,
+			Output: &sts.AssumeRoleOutput{
+				Credentials: &types.Credentials{
+					AccessKeyId:     &soutput.AccessKeyId,
+					SecretAccessKey: &soutput.SecretAccessKey,
+					SessionToken:    &soutput.SessionToken,
+					Expiration:      &expiration,
+				},
+			},
+			Error: nil,
+		})
+
+		ctx := context.Background()
+
+		err = cmd.ValidateInputs([]string{roleArn})
+		require.NoError(t, err, "fields of AssumeRoleCmd should validate without error")
+
+		// Use a mocked credentials provider so that we can load config without error during tests.
+		mockCredsProvider := credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")
+
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
+		require.NoError(t, err, "should be able to load config using a mocked credentials provider")
+
+		err = cmd.Init(tty, cfg)
+		require.NoError(t, err, "should be able to init caching without error")
+
+		// Stub the STS client object.
+		cmd.client = sts.NewFromConfig(*stubber.SdkConfig)
+
+		err = cmd.Run(ctx, &dest)
+		require.NoError(t, err, "should be able to run command without error")
+
+		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", EncodeToFileName(roleArn, expiration))
+
+		info, err := os.Stat(cacheFilePath)
+		require.NoError(t, err, "should be able to locate the cache file created by the Run method")
+
+		assert.False(t, info.IsDir(), "the cache file created by the Run method should be a regular file, not a directory")
+
+		rawContents, err := os.ReadFile(filepath.Clean(cacheFilePath))
+		require.NoError(t, err, "should be able to read cache file raw content without error")
+
+		rawContents, err = cmd.cacher.cipher.Decrypt(rawContents)
+		require.NoError(t, err, "should be able to decrypt cache file without error")
+
+		var sCachedContents CredentialProcessOutput
+
+		err = json.Unmarshal(rawContents, &sCachedContents)
+		require.NoError(t, err, "should be able to unmarshal decrypted cache file without error")
+
+		assert.Equal(t, sCachedContents.AccessKeyId, soutput.AccessKeyId, "AccessKeyId from cache file should match STS call result")
+
+		assert.Equal(t, sCachedContents.SecretAccessKey, soutput.SecretAccessKey, "SecretAccessKey from cache file should match STS call result")
+
+		assert.Equal(t, sCachedContents.SessionToken, soutput.SessionToken, "SessionToken from cache file should match STS call result")
+
+		assert.Equal(t, sCachedContents.Expiration, soutput.Expiration, "Expiration from cache file should match STS call result")
+
+		assert.Equal(t, sCachedContents.Version, soutput.Version, "Version from cache file should be the right value of 1")
+
+		assert.Equal(t, rawContents, dest.w.Bytes(), "outputs to stdout should be identical to decrypted cache file contents")
 	})
 
-	ctx := context.Background()
+	t.Run("Happy path cache hits", func(t *testing.T) {
+		cmd := AssumeRoleCmd{
+			MFASerial:       "mfa-serial",
+			Profile:         "profile",
+			Region:          "us-east-1",
+			RoleSessionName: "ToolkitCLI",
+			DurationSeconds: int64(duration),
+		}
 
-	err = cmd.ValidateInputs([]string{roleArn})
-	require.NoError(t, err, "fields of AssumeRoleCmd should validate without error")
+		mockedTtyDevice := &MockFileDescriptor{}
 
-	// Use a mocked credentials provider so that we can load config without error during tests.
-	mockCredsProvider := credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")
+		tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
 
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
-	require.NoError(t, err, "should be able to load config using a mocked credentials provider")
+		dest := MockFileDescriptor{}
 
-	err = cmd.Init(tty, cfg)
-	require.NoError(t, err, "should be able to init caching without error")
+		ctx := context.Background()
 
-	// Stub the STS client object.
-	cmd.client = sts.NewFromConfig(*stubber.SdkConfig)
+		err := cmd.ValidateInputs([]string{roleArn})
+		require.NoError(t, err, "fields of AssumeRoleCmd should validate without error")
 
-	err = cmd.Run(ctx, &dest)
-	require.NoError(t, err, "should be able to run command without error")
+		// Use a mocked credentials provider so that we can load config without error during tests.
+		mockCredsProvider := credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")
 
-	cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", EncodeToFileName(roleArn, expiration))
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
+		require.NoError(t, err, "should be able to load config using a mocked credentials provider")
 
-	info, err := os.Stat(cacheFilePath)
-	require.NoError(t, err, "should be able to locate the cache file created by the Run method")
+		err = cmd.Init(tty, cfg)
+		require.NoError(t, err, "should be able to init caching without error")
 
-	assert.False(t, info.IsDir(), "the cache file created by the Run method should be a regular file, not a directory")
+		// Stub the STS client object. When cache hits, the STS client shouldn't have been used at all.
+		cmd.client = nil
 
-	rawContents, err := os.ReadFile(filepath.Clean(cacheFilePath))
-	require.NoError(t, err, "should be able to read cache file raw content without error")
+		err = cmd.Run(ctx, &dest)
+		require.NoError(t, err, "should be able to run command without error")
 
-	rawContents, err = cmd.cacher.cipher.Decrypt(rawContents)
-	require.NoError(t, err, "should be able to decrypt cache file without error")
+		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", EncodeToFileName(roleArn, expiration))
 
-	var sCachedContents CredentialProcessOutput
+		info, err := os.Stat(cacheFilePath)
+		require.NoError(t, err, "should be able to locate the cache file created by the Run method")
 
-	err = json.Unmarshal(rawContents, &sCachedContents)
-	require.NoError(t, err, "should be able to unmarshal decrypted cache file without error")
+		assert.False(t, info.IsDir(), "the cache file created by the Run method should be a regular file, not a directory")
 
-	assert.Equal(t, sCachedContents.AccessKeyId, soutput.AccessKeyId, "AccessKeyId from cache file should match STS call result")
+		rawContents, err := os.ReadFile(filepath.Clean(cacheFilePath))
+		require.NoError(t, err, "should be able to read cache file raw content without error")
 
-	assert.Equal(t, sCachedContents.SecretAccessKey, soutput.SecretAccessKey, "SecretAccessKey from cache file should match STS call result")
+		rawContents, err = cmd.cacher.cipher.Decrypt(rawContents)
+		require.NoError(t, err, "should be able to decrypt cache file without error")
 
-	assert.Equal(t, sCachedContents.SessionToken, soutput.SessionToken, "SessionToken from cache file should match STS call result")
+		var sCachedContents CredentialProcessOutput
 
-	assert.Equal(t, sCachedContents.Expiration, soutput.Expiration, "Expiration from cache file should match STS call result")
+		err = json.Unmarshal(rawContents, &sCachedContents)
+		require.NoError(t, err, "should be able to unmarshal decrypted cache file without error")
 
-	assert.Equal(t, sCachedContents.Version, soutput.Version, "Version from cache file should be the right value of 1")
+		var stdoutContents CredentialProcessOutput
 
-	assert.Equal(t, rawContents, dest.w.Bytes(), "outputs to stdout should be identical to decrypted cache file contents")
+		err = json.Unmarshal(dest.w.Bytes(), &stdoutContents)
+		require.NoError(t, err, "should be able to unmarshal outputs to stdout without error")
+
+		assert.Equal(t, sCachedContents.AccessKeyId, stdoutContents.AccessKeyId, "AccessKeyId from cache file should match that from stdout")
+
+		assert.Equal(t, sCachedContents.SecretAccessKey, stdoutContents.SecretAccessKey, "SecretAccessKey from cache file should match that from stdout")
+
+		assert.Equal(t, sCachedContents.SessionToken, stdoutContents.SessionToken, "SessionToken from cache file should match that from stdout")
+
+		assert.Equal(t, sCachedContents.Expiration, stdoutContents.Expiration, "Expiration from cache file should match that from stdout")
+
+		assert.Equal(t, sCachedContents.Version, stdoutContents.Version, "Version from cache file should match that from stdout")
+	})
 }
