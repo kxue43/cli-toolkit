@@ -1,4 +1,4 @@
-package auth
+package creds
 
 import (
 	"bytes"
@@ -16,10 +16,13 @@ import (
 	"github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kxue43/cli-toolkit/cipher"
+	"github.com/kxue43/cli-toolkit/terminal"
 )
 
 type (
-	MockFileDescriptor struct {
+	MockTerminal struct {
 		r bytes.Buffer
 		w bytes.Buffer
 	}
@@ -30,11 +33,11 @@ type (
 	}
 )
 
-func (fd *MockFileDescriptor) Read(p []byte) (n int, err error) {
+func (fd *MockTerminal) Read(p []byte) (n int, err error) {
 	return fd.r.Read(p)
 }
 
-func (fd *MockFileDescriptor) Write(p []byte) (n int, err error) {
+func (fd *MockTerminal) Write(p []byte) (n int, err error) {
 	return fd.w.Write(p)
 }
 
@@ -64,13 +67,17 @@ func (m *HomeDirMocker) TearDown(t *testing.T) {
 }
 
 func TestAssumeRoleCmdRun(t *testing.T) {
-	aesKey, _, err := generateKey(keySize)
+	var aesKey [cipher.AesKeySize]byte
+
+	_, err := generateKey(&aesKey)
 	require.NoError(t, err, "should be able to generate a random encryption key")
 
-	fromKeyring = func() ([]byte, error) {
+	fromKeyring = func(key *[cipher.AesKeySize]byte) error {
 		t.Helper()
 
-		return aesKey, nil
+		copy(key[:], aesKey[:])
+
+		return nil
 	}
 
 	defer func() { fromKeyring = keyringGet }()
@@ -99,14 +106,14 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 		token := "123456"
 
-		mockedTtyDevice := &MockFileDescriptor{}
+		mockedTerminal := &MockTerminal{}
 
-		_, err := mockedTtyDevice.r.WriteString(token + "\n")
+		_, err := mockedTerminal.r.WriteString(token + "\n")
 		require.NoError(t, err, "should be able to write token to mocked TTY file descriptor")
 
-		tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
+		tty := terminal.NewTTY(mockedTerminal, "toolkit-assume-role: ", 0)
 
-		dest := MockFileDescriptor{}
+		dest := MockTerminal{}
 
 		soutput := CredentialProcessOutput{
 			AccessKeyId:     "access-key-id",
@@ -159,7 +166,7 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 		err = cmd.Run(ctx, &dest)
 		require.NoError(t, err, "should be able to run command without error")
 
-		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", EncodeToFileName(roleArn, expiration))
+		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", encodeToFileName(roleArn, expiration))
 
 		info, err := os.Stat(cacheFilePath)
 		require.NoError(t, err, "should be able to locate the cache file created by the Run method")
@@ -199,11 +206,11 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 			DurationSeconds: int64(duration),
 		}
 
-		mockedTtyDevice := &MockFileDescriptor{}
+		mockedTerminal := &MockTerminal{}
 
-		tty := NewTTY(mockedTtyDevice, "toolkit-assume-role: ", 0)
+		tty := terminal.NewTTY(mockedTerminal, "toolkit-assume-role: ", 0)
 
-		dest := MockFileDescriptor{}
+		dest := MockTerminal{}
 
 		ctx := context.Background()
 
@@ -225,7 +232,7 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 		err = cmd.Run(ctx, &dest)
 		require.NoError(t, err, "should be able to run command without error")
 
-		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", EncodeToFileName(roleArn, expiration))
+		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", encodeToFileName(roleArn, expiration))
 
 		info, err := os.Stat(cacheFilePath)
 		require.NoError(t, err, "should be able to locate the cache file created by the Run method")

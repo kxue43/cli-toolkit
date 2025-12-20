@@ -97,7 +97,7 @@ linters:
   exclusions:
     generated: lax
     rules:
-      - path: '^auth/cache\.go$'
+      - path: '^creds/cache\.go$'
         linters:
           - gosec
         # crypto/sha1 is used for hashing, not encryption.
@@ -112,7 +112,7 @@ linters:
           - gosec
         # local static files server doesn't need timeout
         text: "G114: Use of net/http serve function that has no support for setting timeouts"
-      - path: '^auth/command_test\.go$'
+      - path: '^creds/command_test\.go$'
         linters:
           - gosec
         # unit test only, and we know overflow doesn't happen

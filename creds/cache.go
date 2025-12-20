@@ -1,4 +1,4 @@
-package auth
+package creds
 
 import (
 	"crypto/sha1"
@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/kxue43/cli-toolkit/cipher"
 )
 
 type (
@@ -23,10 +25,10 @@ type (
 		Version         int    `json:"Version"`
 	}
 
-	Cacher struct {
-		logger   Logger
+	cacher struct {
+		logger   logger
+		cipher   *cipher.AesGcm
 		cacheDir string
-		cipher   Cipher
 	}
 
 	cacheFile struct {
@@ -55,18 +57,18 @@ func (cs cacheFileSlice) Swap(i, j int) {
 	cs[i], cs[j] = cs[j], cs[i]
 }
 
-func GetPrefix(s string) string {
+func getPrefix(s string) string {
 	h := sha1.Sum([]byte(s))
 
 	return hex.EncodeToString(h[:])[0:7]
 }
 
-func EncodeToFileName(roleArn string, ts time.Time) string {
-	return fmt.Sprintf("%s-%s", GetPrefix(roleArn), strconv.FormatInt(ts.Unix(), 10))
+func encodeToFileName(roleArn string, ts time.Time) string {
+	return fmt.Sprintf("%s-%s", getPrefix(roleArn), strconv.FormatInt(ts.Unix(), 10))
 }
 
-func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
-	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)$`, GetPrefix(roleArn)))
+func decodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
+	regex := regexp.MustCompile(fmt.Sprintf(`^%s-(\d+)$`, getPrefix(roleArn)))
 
 	matches := regex.FindStringSubmatch(fileName)
 	if matches == nil {
@@ -84,7 +86,12 @@ func DecodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 }
 
 // Non-nil returned error wraps [ErrCacheInit].
-func NewCacher(logger Logger, cipher Cipher) (*Cacher, error) {
+func newCacher(logger logger, fn cipher.AesKeyFunc) (*cacher, error) {
+	aes, err := cipher.NewAesGcm(fn)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrCacheInit, err.Error())
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not locate user home directory", ErrCacheInit)
@@ -98,7 +105,7 @@ func NewCacher(logger Logger, cipher Cipher) (*Cacher, error) {
 			return nil, fmt.Errorf("%w: failed to create cache directory", ErrCacheInit)
 		}
 
-		return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}, nil
+		return &cacher{logger: logger, cacheDir: cacheDir, cipher: aes}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("%w: failed to locate cache directory: %s", ErrCacheInit, err.Error())
 	}
@@ -107,11 +114,12 @@ func NewCacher(logger Logger, cipher Cipher) (*Cacher, error) {
 		return nil, fmt.Errorf("%w: cache directory is already a file", ErrCacheInit)
 	}
 
-	return &Cacher{logger: logger, cacheDir: cacheDir, cipher: cipher}, nil
+	return &cacher{logger: logger, cacheDir: cacheDir, cipher: aes}, nil
 }
 
 // Non-nil returned error wraps [ErrInvalidCredential] or [ErrCacheSave].
-func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
+// contents is valid for use as long as it's not nil.
+func (c *cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
 	ts, err := time.Parse(time.RFC3339, output.Expiration)
 	if err != nil {
 		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %s", ErrInvalidCredential, output.Expiration, err.Error())
@@ -122,7 +130,7 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 		return nil, fmt.Errorf("%w: failed to serialize CredentialProcessOutput: %s", ErrInvalidCredential, err.Error())
 	}
 
-	filePath := filepath.Join(c.cacheDir, EncodeToFileName(roleArn, ts))
+	filePath := filepath.Join(c.cacheDir, encodeToFileName(roleArn, ts))
 
 	encrypted, err := c.cipher.Encrypt(contents)
 	if err != nil {
@@ -138,10 +146,10 @@ func (c *Cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 
 // Retrieve tries to retrieve AWS credentials from cache files.
 // It succeeded if and only if the returned byte slice is not nil.
-func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
+func (c *cacher) Retrieve(roleArn string) (contents []byte) {
 	max := time.Now().Add(time.Minute * 10)
 	actives := make(cacheFileSlice, 0)
-	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*`, GetPrefix(roleArn)))
+	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*`, getPrefix(roleArn)))
 
 	cacheFiles, err := filepath.Glob(pattern)
 	if err != nil {
@@ -153,7 +161,7 @@ func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	var expiration time.Time
 
 	for _, fullPath := range cacheFiles {
-		if expiration, err = DecodeFromFileName(roleArn, filepath.Base(fullPath)); err != nil {
+		if expiration, err = decodeFromFileName(roleArn, filepath.Base(fullPath)); err != nil {
 			c.deleteCacheFile(fullPath, "invalid")
 
 			continue
@@ -193,7 +201,7 @@ func (c *Cacher) Retrieve(roleArn string) (contents []byte) {
 	return contents
 }
 
-func (c *Cacher) deleteCacheFile(fullPath string, desc string) {
+func (c *cacher) deleteCacheFile(fullPath string, desc string) {
 	if os.Remove(fullPath) != nil {
 		c.logger.Printf("Failed to delete %s cache file %q.\n", desc, fullPath)
 	}
