@@ -86,7 +86,7 @@ func decodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 }
 
 // Non-nil returned error wraps [ErrCacheInit].
-func newCacher(logger logger, fn cipher.KeyFunc) (*cacher, error) {
+func newCacher(logger logger, fn cipher.AesKeyFunc) (*cacher, error) {
 	aes, err := cipher.NewAesGcm(fn)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCacheInit, err.Error())

@@ -55,10 +55,10 @@ const (
 var (
 	ErrInvalidInput = errors.New("invalid CLI input")
 
-	fromKeyring cipher.KeyFunc = keyringGet
+	fromKeyring cipher.AesKeyFunc = keyringGet
 )
 
-func generateKey(key *[32]byte) (string, error) {
+func generateKey(key *[cipher.AesKeySize]byte) (string, error) {
 	if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
 		return "", fmt.Errorf("failed to generate encryption key: %s", err.Error())
 	}
@@ -66,7 +66,7 @@ func generateKey(key *[32]byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(key[:]), nil
 }
 
-func keyringGet(key *[32]byte) error {
+func keyringGet(key *[cipher.AesKeySize]byte) error {
 	secret, err := keyring.Get(service, user)
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return fmt.Errorf("failed to retrieve encryption key: secret exists but cannot be read: %s", err.Error())

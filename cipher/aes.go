@@ -10,11 +10,15 @@ import (
 )
 
 type (
-	KeyFunc func(*[32]byte) error
+	AesKeyFunc func(*[AesKeySize]byte) error
 
 	AesGcm struct {
-		key [32]byte
+		key [AesKeySize]byte
 	}
+)
+
+const (
+	AesKeySize = 32
 )
 
 var (
@@ -22,7 +26,7 @@ var (
 )
 
 // Non-nil returned error wraps [ErrCipher].
-func NewAesGcm(fn KeyFunc) (*AesGcm, error) {
+func NewAesGcm(fn AesKeyFunc) (*AesGcm, error) {
 	aes := AesGcm{}
 
 	err := fn(&aes.key)

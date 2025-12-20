@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kxue43/cli-toolkit/cipher"
 	"github.com/kxue43/cli-toolkit/terminal"
 )
 
@@ -66,12 +67,12 @@ func (m *HomeDirMocker) TearDown(t *testing.T) {
 }
 
 func TestAssumeRoleCmdRun(t *testing.T) {
-	var aesKey [32]byte
+	var aesKey [cipher.AesKeySize]byte
 
 	_, err := generateKey(&aesKey)
 	require.NoError(t, err, "should be able to generate a random encryption key")
 
-	fromKeyring = func(key *[32]byte) error {
+	fromKeyring = func(key *[cipher.AesKeySize]byte) error {
 		t.Helper()
 
 		copy(key[:], aesKey[:])
