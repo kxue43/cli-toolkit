@@ -8,11 +8,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 
-	"github.com/kxue43/cli-toolkit/auth"
+	"github.com/kxue43/cli-toolkit/creds"
+	"github.com/kxue43/cli-toolkit/terminal"
 )
 
 var (
-	cmd = auth.AssumeRoleCmd{}
+	cmd = creds.AssumeRoleCmd{}
 
 	helpMsg = `Usage: %s -mfa-serial=STRING -profile=STRING [flags] <RoleArn>
 
@@ -57,7 +58,7 @@ func main() {
 
 	defer func() { _ = ttyDevice.Close() }()
 
-	tty := auth.NewTTY(ttyDevice, "toolkit-assume-role: ", 0)
+	tty := terminal.NewTTY(ttyDevice, "toolkit-assume-role: ", 0)
 	defer func() {
 		if tty.FlushLogs() != nil {
 			exitCode = 1
