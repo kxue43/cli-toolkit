@@ -49,16 +49,16 @@ func main() {
 
 	flag.Parse()
 
-	ttyDevice, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
+	device, err := os.OpenFile("/dev/tty", os.O_RDWR|os.O_SYNC, 0600)
 	if err != nil {
 		exitCode = 1
 
 		return
 	}
 
-	defer func() { _ = ttyDevice.Close() }()
+	defer func() { _ = device.Close() }()
 
-	tty := terminal.NewTTY(ttyDevice, "toolkit-assume-role: ", 0)
+	tty := terminal.NewTTY(device, "toolkit-assume-role: ", 0)
 	defer func() {
 		if tty.FlushLogs() != nil {
 			exitCode = 1
