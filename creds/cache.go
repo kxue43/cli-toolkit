@@ -17,14 +17,6 @@ import (
 )
 
 type (
-	CredentialProcessOutput struct {
-		AccessKeyId     string `json:"AccessKeyId"`
-		SecretAccessKey string `json:"SecretAccessKey"`
-		SessionToken    string `json:"SessionToken"`
-		Expiration      string `json:"Expiration"`
-		Version         int    `json:"Version"`
-	}
-
 	cacher struct {
 		logger   logger
 		cipher   *cipher.AesGcm
@@ -86,16 +78,20 @@ func decodeFromFileName(roleArn, fileName string) (ts time.Time, err error) {
 }
 
 // Non-nil returned error wraps [ErrCacheInit].
-func newCacher(logger logger, fn cipher.AesKeyFunc) (*cacher, error) {
-	aes, err := cipher.NewAesGcm(fn)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrCacheInit, err.Error())
-	}
-
+func newCacher(logger logger, kp KeyProvider) (*cacher, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not locate user home directory", ErrCacheInit)
 	}
+
+	var key cipher.AesKey
+
+	err = kp.Write(key[:])
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to obtain encryption key for cache file: %s", ErrCacheInit, err.Error())
+	}
+
+	aes := cipher.NewAesGcm(key)
 
 	cacheDir := filepath.Join(home, ".aws", "toolkit-cache")
 
@@ -119,7 +115,7 @@ func newCacher(logger logger, fn cipher.AesKeyFunc) (*cacher, error) {
 
 // Non-nil returned error wraps [ErrInvalidCredential] or [ErrCacheSave].
 // contents is valid for use as long as it's not nil.
-func (c *cacher) Save(roleArn string, output *CredentialProcessOutput) (contents []byte, err error) {
+func (c *cacher) save(roleArn string, output *ProcessOutput) (contents []byte, err error) {
 	ts, err := time.Parse(time.RFC3339, output.Expiration)
 	if err != nil {
 		return nil, fmt.Errorf("%w: expiration %q is not of the right format: %s", ErrInvalidCredential, output.Expiration, err.Error())
@@ -144,9 +140,9 @@ func (c *cacher) Save(roleArn string, output *CredentialProcessOutput) (contents
 	return contents, nil
 }
 
-// Retrieve tries to retrieve AWS credentials from cache files.
+// retrieve tries to retrieve AWS credentials from cache files.
 // It succeeded if and only if the returned byte slice is not nil.
-func (c *cacher) Retrieve(roleArn string) (contents []byte) {
+func (c *cacher) retrieve(roleArn string) (contents []byte) {
 	max := time.Now().Add(time.Minute * 10)
 	actives := make(cacheFileSlice, 0)
 	pattern := filepath.Join(c.cacheDir, fmt.Sprintf(`%s-*`, getPrefix(roleArn)))

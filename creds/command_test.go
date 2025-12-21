@@ -3,14 +3,15 @@ package creds
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools"
@@ -31,7 +32,31 @@ type (
 		TempDir string
 		home    string
 	}
+
+	AesKeyProvider struct {
+		key cipher.AesKey
+	}
 )
+
+func NewAesKeyProvider() (*AesKeyProvider, error) {
+	p := AesKeyProvider{}
+
+	if _, err := io.ReadFull(rand.Reader, p.key[:]); err != nil {
+		return nil, fmt.Errorf("failed to generate encryption key: %s", err.Error())
+	}
+
+	return &p, nil
+}
+
+func (p *AesKeyProvider) Write(key []byte) error {
+	if len(key) != len(p.key) {
+		return fmt.Errorf("the input byte slice should have length %d, but its length is %d.", len(p.key), len(key))
+	}
+
+	copy(key, p.key[:])
+
+	return nil
+}
 
 func (fd *MockTerminal) Read(p []byte) (n int, err error) {
 	return fd.r.Read(p)
@@ -67,25 +92,16 @@ func (m *HomeDirMocker) TearDown(t *testing.T) {
 }
 
 func TestAssumeRoleCmdRun(t *testing.T) {
-	var aesKey [cipher.AesKeySize]byte
-
-	_, err := generateKey(&aesKey)
-	require.NoError(t, err, "should be able to generate a random encryption key")
-
-	fromKeyring = func(key *[cipher.AesKeySize]byte) error {
-		t.Helper()
-
-		copy(key[:], aesKey[:])
-
-		return nil
-	}
-
-	defer func() { fromKeyring = keyringGet }()
-
 	hdm := HomeDirMocker{}
 
 	hdm.SetUp(t)
 	defer hdm.TearDown(t)
+
+	kp, err1 := NewAesKeyProvider()
+	require.NoError(t, err1, "should be able to create AesKeyProvider during tests")
+
+	stubber := testtools.NewStubber()
+	defer testtools.ExitTest(stubber, t)
 
 	roleArn := "role-arn"
 
@@ -96,7 +112,8 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	t.Run("Happy path no cache", func(t *testing.T) {
 		// Create an AssumeRoleCmd with some fields already filled with valid values.
 		// We don't test CLI parsing in unit tests.
-		cmd := AssumeRoleCmd{
+		input := ProcessInput{
+			RoleArn:         roleArn,
 			MFASerial:       "mfa-serial",
 			Profile:         "profile",
 			Region:          "us-east-1",
@@ -115,7 +132,7 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 		dest := MockTerminal{}
 
-		soutput := CredentialProcessOutput{
+		soutput := ProcessOutput{
 			AccessKeyId:     "access-key-id",
 			SecretAccessKey: "secret-access-key",
 			SessionToken:    "session-token",
@@ -123,16 +140,13 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 			Version:         1,
 		}
 
-		stubber := testtools.NewStubber()
-		defer testtools.ExitTest(stubber, t)
-
 		stubber.Add(testtools.Stub{
 			OperationName: "AssumeRole",
 			Input: &sts.AssumeRoleInput{
 				DurationSeconds: &duration,
 				RoleArn:         &roleArn,
-				RoleSessionName: &cmd.RoleSessionName,
-				SerialNumber:    &cmd.MFASerial,
+				RoleSessionName: &input.RoleSessionName,
+				SerialNumber:    &input.MFASerial,
 				TokenCode:       &token,
 			},
 			Output: &sts.AssumeRoleOutput{
@@ -148,22 +162,9 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 		ctx := context.Background()
 
-		err = cmd.ValidateInputs([]string{roleArn})
-		require.NoError(t, err, "fields of AssumeRoleCmd should validate without error")
+		processor := NewProcessor(input, tty, *stubber.SdkConfig, kp)
 
-		// Use a mocked credentials provider so that we can load config without error during tests.
-		mockCredsProvider := credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")
-
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
-		require.NoError(t, err, "should be able to load config using a mocked credentials provider")
-
-		err = cmd.Init(tty, cfg)
-		require.NoError(t, err, "should be able to init caching without error")
-
-		// Stub the STS client object.
-		cmd.client = sts.NewFromConfig(*stubber.SdkConfig)
-
-		err = cmd.Run(ctx, &dest)
+		err = processor.Run(ctx, &dest)
 		require.NoError(t, err, "should be able to run command without error")
 
 		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", encodeToFileName(roleArn, expiration))
@@ -176,10 +177,10 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 		rawContents, err := os.ReadFile(filepath.Clean(cacheFilePath))
 		require.NoError(t, err, "should be able to read cache file raw content without error")
 
-		rawContents, err = cmd.cacher.cipher.Decrypt(rawContents)
+		rawContents, err = processor.cacher.cipher.Decrypt(rawContents)
 		require.NoError(t, err, "should be able to decrypt cache file without error")
 
-		var sCachedContents CredentialProcessOutput
+		var sCachedContents ProcessOutput
 
 		err = json.Unmarshal(rawContents, &sCachedContents)
 		require.NoError(t, err, "should be able to unmarshal decrypted cache file without error")
@@ -198,7 +199,8 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 	})
 
 	t.Run("Happy path cache hits", func(t *testing.T) {
-		cmd := AssumeRoleCmd{
+		input := ProcessInput{
+			RoleArn:         roleArn,
 			MFASerial:       "mfa-serial",
 			Profile:         "profile",
 			Region:          "us-east-1",
@@ -214,22 +216,9 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 
 		ctx := context.Background()
 
-		err := cmd.ValidateInputs([]string{roleArn})
-		require.NoError(t, err, "fields of AssumeRoleCmd should validate without error")
+		processor := NewProcessor(input, tty, *stubber.SdkConfig, kp)
 
-		// Use a mocked credentials provider so that we can load config without error during tests.
-		mockCredsProvider := credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")
-
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(mockCredsProvider), config.WithRegion(cmd.Region))
-		require.NoError(t, err, "should be able to load config using a mocked credentials provider")
-
-		err = cmd.Init(tty, cfg)
-		require.NoError(t, err, "should be able to init caching without error")
-
-		// Stub the STS client object. When cache hits, the STS client shouldn't have been used at all.
-		cmd.client = nil
-
-		err = cmd.Run(ctx, &dest)
+		err := processor.Run(ctx, &dest)
 		require.NoError(t, err, "should be able to run command without error")
 
 		cacheFilePath := filepath.Join(hdm.TempDir, ".aws", "toolkit-cache", encodeToFileName(roleArn, expiration))
@@ -242,15 +231,15 @@ func TestAssumeRoleCmdRun(t *testing.T) {
 		rawContents, err := os.ReadFile(filepath.Clean(cacheFilePath))
 		require.NoError(t, err, "should be able to read cache file raw content without error")
 
-		rawContents, err = cmd.cacher.cipher.Decrypt(rawContents)
+		rawContents, err = processor.cacher.cipher.Decrypt(rawContents)
 		require.NoError(t, err, "should be able to decrypt cache file without error")
 
-		var sCachedContents CredentialProcessOutput
+		var sCachedContents ProcessOutput
 
 		err = json.Unmarshal(rawContents, &sCachedContents)
 		require.NoError(t, err, "should be able to unmarshal decrypted cache file without error")
 
-		var stdoutContents CredentialProcessOutput
+		var stdoutContents ProcessOutput
 
 		err = json.Unmarshal(dest.w.Bytes(), &stdoutContents)
 		require.NoError(t, err, "should be able to unmarshal outputs to stdout without error")

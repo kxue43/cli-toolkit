@@ -10,15 +10,11 @@ import (
 )
 
 type (
-	AesKeyFunc func(*[AesKeySize]byte) error
+	AesKey [32]byte
 
 	AesGcm struct {
-		key [AesKeySize]byte
+		key AesKey
 	}
-)
-
-const (
-	AesKeySize = 32
 )
 
 var (
@@ -26,15 +22,8 @@ var (
 )
 
 // Non-nil returned error wraps [ErrCipher].
-func NewAesGcm(fn AesKeyFunc) (*AesGcm, error) {
-	aes := AesGcm{}
-
-	err := fn(&aes.key)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get encryption key: %s", ErrCipher, err.Error())
-	}
-
-	return &aes, nil
+func NewAesGcm(key AesKey) *AesGcm {
+	return &AesGcm{key: key}
 }
 
 // Non-nil returned error wraps [ErrCipher].
