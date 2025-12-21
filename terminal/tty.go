@@ -45,11 +45,11 @@ func (t *TTY) Printf(format string, v ...any) {
 	t.logger.Printf(format, v...)
 }
 
-func (t *TTY) Print(v ...any) {
+func (t *TTY) Println(v ...any) {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
-	t.logger.Print(v...)
+	t.logger.Println(v...)
 }
 
 func (t *TTY) FlushLogs() error {
