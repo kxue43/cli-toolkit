@@ -33,19 +33,20 @@ type (
 	}
 
 	PythonProjectCmd struct {
-		rootDir           string
-		ProjectName       string          `arg:"" required:"" name:"ProjectName" help:"Python project name."`
-		Description       string          `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
-		TartufoVersion    SemVer          `name:"tartufo-version" default:"LATEST" help:"Version of tartufo, a pre-commit hook."`
-		RuffVersion       SemVer          `name:"ruff-version" default:"LATEST" help:"Version of ruff, a linting dependency."`
-		MypyVersion       SemVer          `name:"mypy-version" default:"LATEST" help:"Version of mypy, a linting dependency."`
-		PytestVersion     SemVer          `name:"pytest-version" default:"LATEST" help:"Version of pytest, a test dependency."`
-		PytestMockVersion SemVer          `name:"pytest-mock-version" default:"LATEST" help:"Version of pytest-mock, a test dependency."`
-		PytestCovVersion  SemVer          `name:"pytest-cov-version" default:"LATEST" help:"Version of pytest-cov, a test dependency."`
-		SphinxVersion     SemVer          `name:"sphinx-version" default:"LATEST" help:"Version of sphinx, a doc dependency."`
-		PythonVersion     PythonVersion   `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
-		VersionSetters    []VersionSetter `kong:"-"`
-		TimeoutSeconds    int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
+		rootDir                 string
+		ProjectName             string          `arg:"" required:"" name:"ProjectName" help:"Python project name."`
+		Description             string          `name:"description" default:"PLACEHOLDER" help:"Short description of the project"`
+		TartufoVersion          SemVer          `name:"tartufo-version" default:"LATEST" help:"Version of tartufo, a pre-commit hook."`
+		ShellCmdOnChangeVersion SemVer          `name:"shell-cmd-on-change-version" default:"LATEST" help:"Version of shell-cmd-on-change, a post-merge hook."`
+		RuffVersion             SemVer          `name:"ruff-version" default:"LATEST" help:"Version of ruff, a linting dependency."`
+		MypyVersion             SemVer          `name:"mypy-version" default:"LATEST" help:"Version of mypy, a linting dependency."`
+		PytestVersion           SemVer          `name:"pytest-version" default:"LATEST" help:"Version of pytest, a test dependency."`
+		PytestMockVersion       SemVer          `name:"pytest-mock-version" default:"LATEST" help:"Version of pytest-mock, a test dependency."`
+		PytestCovVersion        SemVer          `name:"pytest-cov-version" default:"LATEST" help:"Version of pytest-cov, a test dependency."`
+		SphinxVersion           SemVer          `name:"sphinx-version" default:"LATEST" help:"Version of sphinx, a doc dependency."`
+		PythonVersion           PythonVersion   `name:"python-version" required:"" help:"Python 3 interpreter version. Only accept major and minor version, i.e. the 3.Y format."`
+		VersionSetters          []VersionSetter `kong:"-"`
+		TimeoutSeconds          int             `name:"timeout-seconds" default:"1" help:"Timeout scaffolding after this many seconds."`
 	}
 
 	TsCdkProjectCmd struct {
@@ -177,13 +178,15 @@ func (sv *SemVer) MajorMinor() string {
 }
 
 func (sv *SemVer) UnmarshalText(text []byte) error {
-	if strings.EqualFold(string(text), "LATEST") {
+	textStr := string(text)
+
+	if strings.EqualFold(textStr, "LATEST") {
 		return nil
 	}
 
-	m := semVerRegex.FindStringSubmatch(string(text))
+	m := semVerRegex.FindStringSubmatch(textStr)
 	if len(m) == 0 {
-		return fmt.Errorf(`%s is not of the %s format`, string(text), semVerRegex)
+		return fmt.Errorf(`%s is not of the %s format`, textStr, semVerRegex)
 	}
 
 	sv.major = m[1]
@@ -522,6 +525,7 @@ func (c *PythonProjectCmd) BeforeReset() error {
 		{Registry: PyPI, Name: "pytest-cov", Indirect: &c.PytestCovVersion},
 		{Registry: PyPI, Name: "Sphinx", Indirect: &c.SphinxVersion},
 		{Registry: GitHub, Scope: "godaddy", Name: "tartufo", Indirect: &c.TartufoVersion},
+		{Registry: GitHub, Scope: "kxue43", Name: "shell-cmd-on-change", Indirect: &c.ShellCmdOnChangeVersion},
 	}
 
 	return nil

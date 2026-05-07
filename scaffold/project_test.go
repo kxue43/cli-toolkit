@@ -85,11 +85,13 @@ func TestProjects(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	githubTag := "v1.2.3"
+	genericGithubTag := "v1.2.3"
+	shellCmdOnChangeTag := "2.1.0"
 	pypiVersion := "4.5.6"
 	npmVersion := "7.8.9"
 
-	mux.Handle("GET /{owner}/{repo}/releases/latest", handlerFactory(`{"tag_name": %q}`, githubTag))
+	mux.Handle("GET /kxue43/shell-cmd-on-change/releases/latest", handlerFactory(`{"tag_name": %q}`, shellCmdOnChangeTag))
+	mux.Handle("GET /{owner}/{repo}/releases/latest", handlerFactory(`{"tag_name": %q}`, genericGithubTag))
 	mux.Handle("GET /{name}/json", handlerFactory(`{"info": {"version": %q}}`, pypiVersion))
 
 	npmHandler := handlerFactory(`{"dist-tags": {"latest": %q}}`, npmVersion)
@@ -141,7 +143,7 @@ func TestProjects(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "^"+cmd.GoVersion, workflow.Jobs["test-and-lint"].Steps[1].With["go-version"])
-		assert.Equal(t, githubTag, workflow.Jobs["test-and-lint"].Steps[len(workflow.Jobs["test-and-lint"].Steps)-1].With["version"])
+		assert.Equal(t, genericGithubTag, workflow.Jobs["test-and-lint"].Steps[len(workflow.Jobs["test-and-lint"].Steps)-1].With["version"])
 
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, ".pre-commit-config.yaml")))
 		require.NoError(t, err)
@@ -151,8 +153,8 @@ func TestProjects(t *testing.T) {
 		err = yaml.Unmarshal(contents, &preCommitConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, githubTag, preCommitConfig.Repos[0].Rev)
-		assert.Equal(t, githubTag, preCommitConfig.Repos[1].Rev)
+		assert.Equal(t, genericGithubTag, preCommitConfig.Repos[0].Rev)
+		assert.Equal(t, genericGithubTag, preCommitConfig.Repos[1].Rev)
 
 		for _, hook := range preCommitConfig.Repos[0].Hooks {
 			assert.True(t, strings.HasPrefix(hook.Id, "golangci-lint-"))
@@ -203,16 +205,17 @@ func TestProjects(t *testing.T) {
 		assert.True(t, mypyVersion.Set())
 
 		cmd := PythonProjectCmd{
-			ProjectName:       "fs-walk",
-			Description:       "description",
-			TartufoVersion:    SemVer{},
-			MypyVersion:       mypyVersion,
-			PytestVersion:     SemVer{},
-			PytestMockVersion: SemVer{},
-			PytestCovVersion:  SemVer{},
-			SphinxVersion:     SemVer{},
-			PythonVersion:     pythonVersion,
-			TimeoutSeconds:    5,
+			ProjectName:             "fs-walk",
+			Description:             "description",
+			TartufoVersion:          SemVer{},
+			ShellCmdOnChangeVersion: SemVer{},
+			MypyVersion:             mypyVersion,
+			PytestVersion:           SemVer{},
+			PytestMockVersion:       SemVer{},
+			PytestCovVersion:        SemVer{},
+			SphinxVersion:           SemVer{},
+			PythonVersion:           pythonVersion,
+			TimeoutSeconds:          5,
 		}
 
 		err = cmd.BeforeReset()
@@ -237,7 +240,8 @@ func TestProjects(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "v"+pypiVersion, preCommitConfig.Repos[0].Rev, "the ruff-pre-commit repo should have the right rev field")
-		assert.Equal(t, githubTag, preCommitConfig.Repos[2].Rev, "the tartufo repo should have the right rev field")
+		assert.Equal(t, shellCmdOnChangeTag, preCommitConfig.Repos[1].Rev, "the shell-cmd-on-change repo should have the right rev field")
+		assert.Equal(t, genericGithubTag, preCommitConfig.Repos[2].Rev, "the tartufo repo should have the right rev field")
 
 		contents, err = os.ReadFile(filepath.Clean(filepath.Join(tempDir, "pyproject.toml")))
 		require.NoError(t, err)
@@ -434,12 +438,14 @@ func TestGetVersions(t *testing.T) {
 
 	blackVersion := "25.1.0"
 	golangciLintVersion := "v2.2.2"
+	shellCmdOnChangeVersion := "2.1.0"
 	awsCdkLibVersion := "2.204.0"
 
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /black/json", handlerFactory("pypi", "black", blackVersion))
 	mux.Handle("GET /golangci/golangci-lint/releases/latest", handlerFactory("github", "golangci-lint", golangciLintVersion))
+	mux.Handle("GET /kxue43/shell-cmd-on-change/releases/latest", handlerFactory("github", "shell-cmd-on-change", shellCmdOnChangeVersion))
 	mux.Handle("GET /aws-cdk-lib", handlerFactory("npm", "aws-cdk-lib", awsCdkLibVersion))
 
 	ts := httptest.NewServer(mux)
@@ -472,6 +478,11 @@ func TestGetVersions(t *testing.T) {
 
 		require.NoError(t, err1)
 		assert.Equal(t, golangciLintVersion, v)
+
+		v, err1 = GitHubProjectLatestReleaseTag(context.Background(), "kxue43", "shell-cmd-on-change")
+
+		require.NoError(t, err1)
+		assert.Equal(t, shellCmdOnChangeVersion, v)
 	})
 
 	t.Run("NPMPackageLatestVersion", func(t *testing.T) {
