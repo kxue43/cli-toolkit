@@ -6,7 +6,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/kxue43/shell-cmd-on-change
-    rev: "2.0.0"
+    rev: "{% .ShellCmdOnChangeVersion %}"
     hooks:
       - id: shell-cmd-on-change
         name: uv-sync
