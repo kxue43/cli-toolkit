@@ -12,7 +12,7 @@ from pathlib import Path
 
 project = "{% .ProjectName %}"
 copyright = "Public Domain"
-author = "Ke Xue"
+author = "Sato Seinosuke"
 release = "0.1.0"
 
 # -- General configuration ---------------------------------------------------
