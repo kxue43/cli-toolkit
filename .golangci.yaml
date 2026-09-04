@@ -117,6 +117,26 @@ linters:
           - gosec
         # unit test only, and we know overflow doesn't happen
         text: "G115: integer overflow conversion int64 -> int32"
+      - path: '^creds/(cache|command)\.go$'
+        linters:
+          - gosec
+        # SessionToken is required by AWS's credential_process JSON output format
+        text: "G117: Marshaled struct field"
+      - path: '^scripts/rename-files/main\.go$'
+        linters:
+          - gosec
+        # local dev script; root is a CLI arg from the same user, not untrusted input
+        text: "G703: Path traversal via taint analysis"
+      - path: '^scripts/rename-files/main\.go$'
+        linters:
+          - gosec
+        # local dev script; no privilege boundary, TOCTOU race doesn't apply
+        text: "G122: Filesystem operation in filepath.Walk/WalkDir callback"
+      - path: '^scripts/rename-files/main\.go$'
+        linters:
+          - gosec
+        # local dev script; root/error text come from the same user's CLI args
+        text: "G706: Log injection via taint analysis"
     paths:
       - adhoc/
 
