@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
 	"html"
@@ -32,20 +33,60 @@ Arguments:
 	//go:embed .github.style.tmplt
 	gitHubMarkdownTemplate []byte
 
-	frontmatterPattern = regexp.MustCompile(`(?s)\A---\r?\n(.*?)\r?\n---[ \t]*\r?\n?`)
-	bareURLPattern     = regexp.MustCompile(`^https?://\S+$`)
+	bareURLPattern = regexp.MustCompile(`^https?://\S+$`)
 )
 
 // splitFrontmatter separates a leading YAML front matter block (delimited by
-// `---` lines) from the rest of the Markdown source. If no front matter is
-// present, yamlPart is nil and body is the entire input.
-func splitFrontmatter(mdContents []byte) (yamlPart []byte, body []byte) {
-	match := frontmatterPattern.FindSubmatch(mdContents)
-	if match == nil {
-		return nil, mdContents
+// "---" lines) from the rest of the Markdown source. If no leading "---"
+// fence is present, yamlPart is nil and body is the entire input. A leading
+// "---" fence that never closes is a real error rather than a silent
+// pass-through, since it means the input claims to have front matter but is
+// malformed.
+func splitFrontmatter(mdContents []byte) (yamlPart []byte, body []byte, err error) {
+	trimmed := bytes.TrimLeft(mdContents, "\r\n\t ")
+
+	if !bytes.HasPrefix(trimmed, []byte("---")) {
+		return nil, mdContents, nil
 	}
 
-	return match[1], mdContents[len(match[0]):]
+	after := trimmed[3:]
+
+	if len(after) > 0 && after[0] != '\n' && !bytes.HasPrefix(after, []byte("\r\n")) {
+		return nil, mdContents, nil
+	}
+
+	idx := indexClosingFence(after)
+	if idx == -1 {
+		return nil, nil, errors.New(`front matter starts with "---" but has no closing fence`)
+	}
+
+	return after[:idx], bytes.TrimLeft(after[idx+4:], "\n\r"), nil
+}
+
+// indexClosingFence returns the byte offset within s of the newline
+// immediately preceding the first line that consists solely of "---",
+// terminated by "\n", "\r\n", or the end of s. Returns -1 if s has no such
+// line. s[idx+4:] is always exactly what follows the 3 closing dashes,
+// since idx always points at a "\n" and the fence line itself is always
+// "\n---" -- 4 bytes.
+func indexClosingFence(s []byte) int {
+	for i, b := range s {
+		if b != '\n' {
+			continue
+		}
+
+		rest := s[i+1:]
+		if !bytes.HasPrefix(rest, []byte("---")) {
+			continue
+		}
+
+		after := rest[3:]
+		if len(after) == 0 || after[0] == '\n' || bytes.HasPrefix(after, []byte("\r\n")) {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // renderFrontmatter renders a YAML front matter block as an HTML table,
@@ -56,6 +97,10 @@ func renderFrontmatter(yamlPart []byte) (string, error) {
 
 	if err := yaml.Unmarshal(yamlPart, &items); err != nil {
 		return "", err
+	}
+
+	if items == nil {
+		return "", errors.New("front matter block did not parse to a YAML mapping")
 	}
 
 	var b strings.Builder
@@ -139,7 +184,10 @@ func main() {
 		logger.Fatalf("Failed to load template file: %s", err)
 	}
 
-	yamlPart, body := splitFrontmatter(mdContents)
+	yamlPart, body, err := splitFrontmatter(mdContents)
+	if err != nil {
+		logger.Fatalf("Failed to parse Markdown front matter: %s", err)
+	}
 
 	var frontmatterHTML string
 
